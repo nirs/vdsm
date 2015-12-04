@@ -334,6 +334,7 @@ AC_OUTPUT([
 	Makefile
 	client/Makefile
 	contrib/Makefile
+	coverage/Makefile
 	debian/Makefile
 	init/Makefile
 	init/systemd/Makefile

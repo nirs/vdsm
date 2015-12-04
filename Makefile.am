@@ -21,6 +21,7 @@
 SUBDIRS = \
 	client \
 	contrib \
+	coverage \
 	debian \
 	init \
 	lib \

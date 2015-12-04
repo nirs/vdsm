@@ -415,9 +415,9 @@ parameters = [
             'Enable manhole debugging service (requires manhole package).'),
 
         ('coverage_enable', 'false',
-            'Enable code coverage (requires python-coverage package). '
-            'false by default. Use environment file /etc/sysconfig/vdsm to '
-            'set COVERAGE_PROCESS_START and COVERAGE_FILE variables.'),
+            'Enable code coverage (false by default). To configure '
+            'coverage, edit @VDSMCONFDIR@/coverage.conf (requires '
+            'vdsm-coverage package).'),
 
     ]),
 

@@ -628,6 +628,13 @@ Requires: xfsprogs
 Gluster plugin enables VDSM to serve Gluster functionalities.
 %endif
 
+%package coverage
+Summary: Support files for generating coverage report
+Requires: python-coverage
+
+%description coverage
+Configuration files for generating coverage report
+
 %prep
 %setup -q
 
@@ -1490,6 +1497,11 @@ exit 0
 %{_datadir}/%{vdsm_name}/gluster/storagedev.py*
 %{_datadir}/%{vdsm_name}/gluster/tasks.py*
 %endif
+
+%files coverage
+%defattr(-, root, root, -)
+%config(noreplace) %{_sysconfdir}/%{vdsm_name}/coverage.conf
+%config(noreplace) %{_sysconfdir}/sysconfig/vdsm
 
 %changelog
 * Sun Oct 13 2013 Yaniv Bronhaim <ybronhei@redhat.com> - 4.13.0

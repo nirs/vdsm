@@ -1,0 +1,4 @@
+# Vdsm environment varibales
+
+# Enable coverage report using specified configuration
+COVERAGE_PROCESS_START=@VDSMCONFDIR@/coverage.conf

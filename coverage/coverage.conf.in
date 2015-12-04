@@ -1,0 +1,12 @@
+# Vdsm coverage configuration
+# See http://coverage.readthedocs.org/en/latest/config.html
+
+[run]
+
+data_file = @VDSMRUNDIR@/vdsm.coverage
+
+branch = True
+
+source =
+    @VDSMDIR@
+    vdsm
