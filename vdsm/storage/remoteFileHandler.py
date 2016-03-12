@@ -334,7 +334,7 @@ def simpleWalk(top, topdown=True, onerror=None, followlinks=False):
 
 
 def directReadLines(path):
-    with fileUtils.open_ex(path, "dr") as f:
+    with fileUtils.DirectFile(path, "dr") as f:
         return f.readlines()
 
 
