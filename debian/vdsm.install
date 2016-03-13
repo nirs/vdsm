@@ -105,7 +105,6 @@
 ./usr/share/vdsm/storage/nfsSD.py
 ./usr/share/vdsm/storage/outOfProcess.py
 ./usr/share/vdsm/storage/persistentDict.py
-./usr/share/vdsm/storage/remoteFileHandler.py
 ./usr/share/vdsm/storage/resourceFactories.py
 ./usr/share/vdsm/storage/resourceManager.py
 ./usr/share/vdsm/storage/sd.py

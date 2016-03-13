@@ -33,7 +33,6 @@ import fileUtils
 import fileVolume
 import misc
 import outOfProcess as oop
-from remoteFileHandler import Timeout
 from persistentDict import PersistentDict, DictValidator
 from vdsm import constants
 from vdsm.utils import stripNewLines
@@ -749,9 +748,6 @@ def scanDomains(pattern="*"):
 
                     return (sdUUID, os.path.dirname(metaFile))
 
-        except Timeout:
-            log.warn("Metadata collection for domain path %s timedout",
-                     possibleDomain, exc_info=True)
         except Exception:
             log.warn("Could not collect metadata file for domain path %s",
                      possibleDomain, exc_info=True)
