@@ -40,6 +40,7 @@ test_modules_py3 = \
 	pthreadTests.py \
 	responseTests.py \
 	scheduleTests.py \
+	storage_directio_test.py \
 	vmStatsTests.py \
 	$(NULL)
 
