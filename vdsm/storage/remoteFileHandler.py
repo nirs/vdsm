@@ -48,6 +48,7 @@ import fileUtils
 import vdsm.infra.zombiereaper as zombiereaper
 import vdsm.infra.filecontrol as filecontrol
 from vdsm.compat import pickle
+from vdsm.storage import directio
 from vdsm import utils
 
 
@@ -334,7 +335,7 @@ def simpleWalk(top, topdown=True, onerror=None, followlinks=False):
 
 
 def directReadLines(path):
-    with fileUtils.DirectFile(path, "r") as f:
+    with directio.DirectFile(path, "r") as f:
         return f.readlines()
 
 
