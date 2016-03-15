@@ -24,6 +24,7 @@ vdsmstoragedir = $(vdsmpylibdir)/storage
 dist_vdsmstorage_PYTHON = \
 	__init__.py \
 	asyncevent.py \
+	check.py \
 	constants.py \
 	exception.py \
 	persistent.py \

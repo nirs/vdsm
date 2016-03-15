@@ -127,6 +127,7 @@ test_modules = \
 	storageMonitorTests.py \
 	storageServerTests.py \
 	storage_asyncevent_test.py \
+	storage_check_test.py \
 	tasksetTests.py \
 	testlibTests.py \
 	toolTests.py \
