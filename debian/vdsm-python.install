@@ -62,6 +62,7 @@
 ./usr/lib/python2.7/dist-packages/vdsm/sslcompat.py
 ./usr/lib/python2.7/dist-packages/vdsm/sslutils.py
 ./usr/lib/python2.7/dist-packages/vdsm/storage/__init__.py
+./usr/lib/python2.7/dist-packages/vdsm/storage/asyncevent.py
 ./usr/lib/python2.7/dist-packages/vdsm/storage/constants.py
 ./usr/lib/python2.7/dist-packages/vdsm/storage/exception.py
 ./usr/lib/python2.7/dist-packages/vdsm/storage/persistent.py

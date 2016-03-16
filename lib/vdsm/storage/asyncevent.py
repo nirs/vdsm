@@ -1,0 +1,459 @@
+#
+# Copyright 2016 Red Hat, Inc.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+#
+# Refer to the README and COPYING files for full details of the license
+#
+
+from __future__ import absolute_import
+
+import asyncore
+import collections
+import errno
+import heapq
+import logging
+import os
+
+from vdsm import utils
+from vdsm.infra import filecontrol
+
+log = logging.getLogger("storage.asyncevent")
+
+
+class EventLoop(object):
+    """
+    Simple event loop implementing a subset of asyncio.BaseEventLoop from
+    Python 3.
+
+    This class is not thread safe. To call from other threads, use
+    call_soon_threadsafe.
+
+    Most of the code is copied as is from Python 3.4 without changes.  See
+    methods docstrings for changes compared with Python 3 code.
+    """
+
+    def __init__(self):
+        """
+        Changes from Python 3:
+        - Remove debugging code
+        - Use deque for ready queue (taken from Python 3.6)
+        - Use asyncore base waekup pipe
+        """
+        self._channels = {}
+        self._scheduled = []
+        self._ready = collections.deque()
+        self._running = False
+        self._closed = False
+        self._waker = self.create_dispatcher(Waker)
+
+    # Running an event loop
+
+    def run_forever(self):
+        """
+        Run the event loop, processing I/O events and scheduled calls until the
+        event loop is stopped.
+
+        Each cycle, we process the events, and the calls scheduled for this
+        cycle. If you schedule a new call from a callback, it will run only in
+        the next cycle, even if the deadline has passed.
+
+        Changes from Python 3:
+        - Add logging
+        """
+        self._check_closed()
+        if self._running:
+            raise RuntimeError('Event loop is running.')
+        self._running = True
+        try:
+            log.info("Starting %s", self)
+            while True:
+                try:
+                    self._run_once()
+                except _StopError:
+                    break
+        finally:
+            self._running = False
+            log.debug("%s stopped", self)
+
+    def _run_once(self):
+        """
+        Run one full iteration of the event loop.
+
+        This calls all currently ready callbacks, polls for I/O,
+        schedules the resulting callbacks, and finally schedules
+        'call_later' callbacks.
+
+        This method is too big, keeping it as is to make it easier to backport
+        fixes from Python 3.
+
+        Changes from Python 3:
+        - Process events using asyncore.
+        - Use when > now when checking for ready timers, required for using
+          utils.monotonic_time using 10 millis resolution.
+        """
+        # Remove delayed calls that were cancelled from head of queue.
+        while self._scheduled and self._scheduled[0]._cancelled:
+            heapq.heappop(self._scheduled)
+
+        timeout = None
+        if self._ready:
+            timeout = 0
+        elif self._scheduled:
+            when = self._scheduled[0]._when
+            timeout = max(0, when - self.time())
+
+        # Note: unlike Python 3 version, this run I/O event handlers now. This
+        # means that handlers scheduled from I/O event handlers will run in
+        # this cycle instead of the next cycle in Python 3.
+        asyncore.poll2(timeout, self._channels)
+
+        # Handle 'later' callbacks that are ready.
+        now = self.time()
+        while self._scheduled:
+            handle = self._scheduled[0]
+            if handle._when > now:
+                break
+            heapq.heappop(self._scheduled)
+            self._ready.append(handle)
+
+        # This is the only place where callbacks are actually *called*.
+        # All other places just add them to ready.
+        # Note: We run all currently scheduled callbacks, but not any
+        # callbacks scheduled by callbacks run this time around --
+        # they will be run the next time (after another I/O poll).
+        # Use an idiom that is thread-safe without using locks.
+        ntodo = len(self._ready)
+        for i in range(ntodo):
+            handle = self._ready.popleft()
+            if handle._cancelled:
+                continue
+            handle._run()
+
+        handle = None  # Needed to break cycles when an exception occurs.
+
+    def stop(self):
+        """
+        May be called from the event loop thread to stop the event loop after
+        all events and timers in the current cycle are processed.
+        """
+        self._check_closed()
+        log.info("Stopping %r", self)
+        self.call_soon(_raise_stop_error)
+
+    def close(self):
+        """
+        Close the event loop. The loop must not be running. Pending callbacks
+        will be lost.
+
+        This clears the resources used by the event loop, but does not wait
+        for completion.
+
+        This is idempotent and irreversible. No other methods should be called
+        after this one.
+
+        Changes from Python 3:
+        - Remove executor handling
+        """
+        if self._running:
+            raise RuntimeError("Cannot close a running event loop")
+        if self._closed:
+            return
+        log.debug("Closing %r", self)
+        self._closed = True
+        self._waker.close()
+        self._ready.clear()
+        del self._scheduled[:]
+        asyncore.close_all(map=self._channels)
+
+    # Making calls
+
+    def call_soon(self, callback, *args):
+        """
+        Arrange for a callback to be called as soon as possible.
+
+        This operates as a FIFO queue: callbacks are called in the
+        order in which they are registered.  Each callback will be
+        called exactly once.
+
+        Any positional arguments after the callback will be passed to
+        the callback when it is called.
+        """
+        self._check_closed()
+        return self._call_soon(callback, args)
+
+    def call_soon_threadsafe(self, callback, *args):
+        """
+        Like call_soon(), but thread-safe.
+
+        No error is reported if the event loop is closed.
+        """
+        handle = self._call_soon(callback, args)
+        self._write_to_self()
+        return handle
+
+    def _call_soon(self, callback, args):
+        """
+        Changes from Python 3:
+        - Remove debugging code
+        - Remove unneeded check_loop argument
+        """
+        handle = Handle(callback, args)
+        self._ready.append(handle)
+        return handle
+
+    def _write_to_self(self):
+        self._waker.wakeup()
+
+    # Scheduling calls
+
+    def call_later(self, delay, callback, *args):
+        """
+        Arrange for a callback to be called at a given time.
+
+        Return a Handle: an opaque object with a cancel() method that
+        can be used to cancel the call.
+
+        The delay can be an int or float, expressed in seconds.  It is
+        always relative to the current time.
+
+        Each callback will be called exactly once.  If two callbacks
+        are scheduled for exactly the same time, it undefined which
+        will be called first.
+
+        Any positional arguments after the callback will be passed to
+        the callback when it is called.
+        """
+        return self.call_at(self.time() + delay, callback, *args)
+
+    def call_at(self, when, callback, *args):
+        """
+        Like call_later(), but uses an absolute time.
+
+        Absolute time corresponds to the event loop's time() method.
+
+        Changes from Python 3:
+        - Remove debugging code
+        """
+        self._check_closed()
+        timer = Timer(when, callback, args)
+        heapq.heappush(self._scheduled, timer)
+        return timer
+
+    # asyncore support
+
+    def create_dispatcher(self, dispatcher_class, *args, **kwargs):
+        """
+        Create asyncore.dispatcher or subclasses using the event loop
+        channels map.
+
+        The dispatcher adds itself to the channels map, and will remove itself
+        when closed.
+
+        This method is not implemented by Python 3 BaseEventLoop. There is no
+        way to integrate asyncore with asyncio in Python 3.
+        """
+        assert "map" not in kwargs, "map is set by the event loop"
+        return dispatcher_class(*args, map=self._channels, **kwargs)
+
+    # Testing
+
+    def is_running(self):
+        return self._running
+
+    def is_closed(self):
+        return self._closed
+
+    # Keeping time
+
+    def time(self):
+        """
+        Return the time according to the event loop's clock.
+
+        This is a float expressed in seconds since an epoch, but the
+        epoch, precision, accuracy and drift are unspecified and may
+        differ per event loop.
+
+        Changes from Python 3:
+        - Use Python 2 compatible monotonic time
+        """
+        return utils.monotonic_time()
+
+    # Validation
+
+    def _check_closed(self):
+        if self._closed:
+            raise RuntimeError('Event loop is closed')
+
+    # Debugging
+
+    def __repr__(self):
+        """
+        Changes from Python 3:
+        - Standard vdsmm __repr__ formatting
+        """
+        return ("<{self.__class__.__name__} "
+                "running={self._running} "
+                "closed={self._closed} "
+                "at 0x{addr}>").format(self=self, addr=id(self))
+
+
+class _StopError(BaseException):
+    """ Raised for stopping the event loop """
+
+
+def _raise_stop_error():
+    raise _StopError
+
+
+class Handle(object):
+    """
+    Simplified version of Python 3.4 asyncio.events.Handle.
+
+    Changes from Python 3:
+    - Remove debugging code.
+    - Remove loop variable.
+    - Thread safe cancellation (Python 3 may try to call None).
+    - _cancelled property instead of instance variable.
+    - Simpler _repr_info
+    """
+
+    def __init__(self, callback, args):
+        self._callback = callback
+        self._args = args
+
+    def cancel(self):
+        self._callback = _CANCELLED
+        self._args = None
+
+    @property
+    def _cancelled(self):
+        return self._callback is _CANCELLED
+
+    def _run(self):
+        try:
+            self._callback(*self._args)
+        except Exception:
+            log.exception("Unhandled error in %s", self)
+        # Break cycles
+        self._callback = self._args = None
+
+    def _repr_info(self):
+        info = [self.__class__.__name__]
+        if self._cancelled:
+            info.append("cancelled")
+        else:
+            info.append("callback=%s" % self._callback)
+            if self._args:
+                info.append("args=%s" % self._args)
+        return info
+
+    def __repr__(self):
+        return "<%s at 0x%x>" % (" ".join(self._repr_info()), id(self))
+
+
+class Timer(Handle):
+    """
+    Simplified version of Python 3.4 asyncio.events.TimerHandle.
+
+    Changes from Python 3:
+    - Remove debugging code.
+    - Do not implement __hash__, __eq__, __ne__ since they are not needed for
+      timer handling.
+    - Simpelr and cheaper __le__, __ge__
+    - Simpler __repr__
+    """
+
+    def __init__(self, when, callback, args):
+        super(Timer, self).__init__(callback, args)
+        self._when = when
+
+    # Comparing (rich comperision required for Python 3)
+
+    def __lt__(self, other):
+        return self._when < other._when
+
+    def __le__(self, other):
+        return self._when <= other._when
+
+    def __gt__(self, other):
+        return self._when > other._when
+
+    def __ge__(self, other):
+        return self._when >= other._when
+
+    # Debugging
+
+    def _repr_info(self):
+        info = super(Timer, self)._repr_info()
+        info.insert(1, "when=%.6f" % self._when)
+        return info
+
+
+def _CANCELLED(*args):
+    pass
+
+
+class Waker(asyncore.file_dispatcher):
+    """
+    Wake up the event loop from another thread.
+
+    The read end of the pipe is watched by the event loop, while other threads
+    may wakeup the event loop by writing a byte to the write end.
+
+    Based on twisted.internet.posixbase._UnixWaker.
+    """
+
+    def __init__(self, map):
+        rfd, wfd = os.pipe()
+        asyncore.file_dispatcher.__init__(self, rfd, map=map)
+        os.close(rfd)  # file_dispatcher duped it
+        filecontrol.set_close_on_exec(self._fileno)
+        filecontrol.set_close_on_exec(wfd)
+        filecontrol.set_non_blocking(wfd)
+        self._wfd = wfd
+
+    def wakeup(self):
+        try:
+            utils.NoIntrCall(os.write, self._wfd, b"\0")
+        except OSError as e:
+            if self.closing:
+                # Another thread tried to wake up after loop was closed.
+                return
+            if e.errno == errno.EAGAIN:
+                # The pipe is full, no need to write.
+                return
+            raise
+
+    def handle_read(self):
+        utils.NoIntrCall(self.socket.read, 1024)
+
+    def handle_close(self):
+        log.error("Wakeup read end was closed")
+        self.close()
+
+    def writable(self):
+        return False
+
+    def close(self):
+        if self.closing:
+            return
+        self.closing = True
+        # Set fd to invalid before closing to make sure other threads do not
+        # write to closed fd.
+        wfd = self._wfd
+        self._wfd = -1
+        os.close(wfd)
+        asyncore.file_dispatcher.close(self)

@@ -41,6 +41,7 @@ test_modules_py3 = \
 	pthreadTests.py \
 	responseTests.py \
 	scheduleTests.py \
+	storage_asyncevent_test.py \
 	vmStatsTests.py \
 	$(NULL)
 
@@ -125,6 +126,7 @@ test_modules = \
 	storageMailboxTests.py \
 	storageMonitorTests.py \
 	storageServerTests.py \
+	storage_asyncevent_test.py \
 	tasksetTests.py \
 	testlibTests.py \
 	toolTests.py \
