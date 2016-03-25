@@ -17,27 +17,28 @@
 #
 # Refer to the README and COPYING files for full details of the license
 #
+
 import errno
 import grp
 import logging
 import os
 import stat
 import sys
+import threading
 import types
-from warnings import warn
 import weakref
 
-from vdsm import constants
-from vdsm.config import config
-from vdsm.storage import exception as se
-
-import threading
 from functools import partial
+from warnings import warn
 
 try:
     from ioprocess import IOProcess
 except ImportError:
     pass
+
+from vdsm import constants
+from vdsm.config import config
+from vdsm.storage import exception as se
 
 from remoteFileHandler import RemoteFileHandlerPool
 
