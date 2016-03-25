@@ -28,4 +28,5 @@ dist_vdsmstorage_PYTHON = \
 	persistent.py \
 	securable.py \
 	sync.py \
+	threadlocal.py \
 	$(NULL)

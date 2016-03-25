@@ -53,11 +53,11 @@ from contextlib import contextmanager
 from functools import wraps
 
 from vdsm.storage import exception as se
+from vdsm.storage.threadlocal import vars
 
 import uuid
 import misc
 import resourceManager
-from threadLocal import vars
 from weakref import proxy
 from vdsm import concurrent
 from vdsm.config import config

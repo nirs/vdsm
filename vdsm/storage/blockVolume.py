@@ -27,6 +27,7 @@ from vdsm import constants
 from vdsm import exception
 from vdsm.config import config
 from vdsm.storage import exception as se
+from vdsm.storage.threadlocal import vars
 import vdsm.utils as utils
 
 import volume
@@ -39,7 +40,6 @@ from misc import deprecated
 import task
 import lvm
 import resourceManager as rm
-from threadLocal import vars
 from sdc import sdCache
 from resourceFactories import LVM_ACTIVATION_NAMESPACE
 import fileUtils

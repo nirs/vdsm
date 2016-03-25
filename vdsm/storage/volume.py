@@ -28,6 +28,7 @@ import image
 from vdsm import qemuimg
 from vdsm.storage import constants as storage_constants
 from vdsm.storage import exception as se
+from vdsm.storage.threadlocal import vars
 
 import sd
 from sdc import sdCache
@@ -35,7 +36,6 @@ import misc
 from misc import deprecated
 import fileUtils
 import task
-from threadLocal import vars
 import resourceFactories
 import resourceManager as rm
 rmanager = rm.ResourceManager.getInstance()

@@ -46,6 +46,7 @@ from vdsm.config import config
 from vdsm.storage import exception as se
 from vdsm.storage.constants import STORAGE
 from vdsm.storage.constants import SECTOR_SIZE
+from vdsm.storage.threadlocal import vars
 
 import sp
 from spbackends import MAX_POOL_DESCRIPTION_SIZE, MAX_DOMAINS
@@ -70,7 +71,6 @@ import misc
 from misc import deprecated
 import taskManager
 import clusterlock
-from threadLocal import vars
 import resourceManager as rm
 from resourceFactories import IMAGE_NAMESPACE
 import devicemapper

@@ -29,6 +29,7 @@ from vdsm import qemuimg
 from vdsm import virtsparsify
 from vdsm.config import config
 from vdsm.storage import exception as se
+from vdsm.storage.threadlocal import vars
 
 from sdc import sdCache
 import sd
@@ -37,7 +38,6 @@ import fileUtils
 import imageSharing
 from vdsm.exception import ActionStopped
 import task
-from threadLocal import vars
 import resourceFactories
 import resourceManager as rm
 
