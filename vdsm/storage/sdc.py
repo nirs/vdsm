@@ -28,9 +28,9 @@ import threading
 from vdsm.config import config
 from vdsm.storage import exception as se
 
-import multipath
 import lvm
 import misc
+import multipath
 
 # Default cache age until forcibly refreshed
 DEFAULT_REFRESH_INTERVAL = 300
