@@ -19,11 +19,14 @@
 #
 
 import re
+
 from collections import namedtuple
 from threading import Lock
-import misc
+
 from vdsm import constants
 from vdsm.utils import AsyncProcessOperation
+
+import misc
 
 # iscsiadm exit statuses
 ISCSI_ERR_SESS_EXISTS = 15
