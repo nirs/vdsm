@@ -48,7 +48,7 @@ _PROC_MOUNTS_PATH = '/proc/mounts'
 _SYS_DEV_BLOCK_PATH = '/sys/dev/block/'
 
 _DELETED_SUFFIX = ' (deleted)'
-_RE_ESCAPE = re.compile(r"\\[0-7]{3}")
+_ESCAPED_SPACES = re.compile(r"\\[0-7]{3}")
 
 
 def _parseFstabLine(line):
@@ -57,19 +57,19 @@ def _parseFstabLine(line):
     fs_mntops = fs_mntops.split(",")
     fs_freq = int(fs_freq)
     fs_passno = int(fs_passno)
-    fs_spec = normpath(_parseFstabPath(fs_spec))
+    fs_spec = normpath(_unescape_spaces(fs_spec))
 
     if fs_file.endswith(_DELETED_SUFFIX):
         fs_file = fs_file[:-len(_DELETED_SUFFIX)]
 
-    fs_file = normpath(_parseFstabPath(fs_file))
+    fs_file = normpath(_unescape_spaces(fs_file))
 
     return MountRecord(fs_spec, fs_file, fs_vfstype, fs_mntops,
                        fs_freq, fs_passno)
 
 
-def _parseFstabPath(path):
-    return _RE_ESCAPE.sub(lambda s: chr(int(s.group()[1:], 8)), path)
+def _unescape_spaces(path):
+    return _ESCAPED_SPACES.sub(lambda s: chr(int(s.group()[1:], 8)), path)
 
 
 class MountError(RuntimeError):
