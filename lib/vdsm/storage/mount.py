@@ -34,6 +34,7 @@ from vdsm import cmdutils
 from vdsm import commands
 from vdsm import constants
 from vdsm import supervdsm
+from vdsm import udevadm
 from vdsm import utils
 
 # Common vfs types
@@ -221,16 +222,30 @@ class Mount(object):
     def mount(self, mntOpts=None, vfstype=None, timeout=None, cgroup=None):
         mount = supervdsm.getProxy().mount if os.geteuid() != 0 else _mount
         self.log.info("mounting %s at %s", self.fs_spec, self.fs_file)
+
         with utils.stopwatch("%s mounted" % self.fs_file, log=self.log):
             mount(self.fs_spec, self.fs_file, mntOpts=mntOpts, vfstype=vfstype,
                   timeout=timeout, cgroup=cgroup)
 
+        # This is a hack to wait unilt the udev events generated when adding a
+        # new mount are processed.
+        # TODO: use pyudev to wait for more specific event
+        with utils.stopwatch("Waiting for mount udev events", log=self.log):
+            udevadm.settle(5)
+
     def umount(self, force=False, lazy=False, freeloop=False, timeout=None):
         umount = supervdsm.getProxy().umount if os.geteuid() != 0 else _umount
         self.log.info("unmounting %s", self.fs_file)
+
         with utils.stopwatch("%s unmounted" % self.fs_file, log=self.log):
             umount(self.fs_file, force=force, lazy=lazy, freeloop=freeloop,
                    timeout=timeout)
+
+        # This is a hack to wait unilt the udev events generated when removing
+        # a mount are processed.
+        # TODO: use pyudev to wait for more specific event
+        with utils.stopwatch("Waiting for umount udev events", log=self.log):
+            udevadm.settle(5)
 
     def isMounted(self):
         try:

@@ -25,8 +25,6 @@ import os
 import shutil
 import stat
 
-from vdsm import udevadm
-from vdsm.utils import stopwatch
 from vdsm.storage import mount
 
 from nose.plugins.skip import SkipTest
@@ -134,9 +132,6 @@ class MountTests(TestCaseBase):
                     self.assertTrue(m.isMounted())
                 finally:
                     m.umount()
-                    # TODO: Use libudev to wait for specific event
-                    with stopwatch("Wait for udev events"):
-                        udevadm.settle(5)
 
     @ValidateRunningAsRoot
     def testSymlinkMount(self):
@@ -158,9 +153,6 @@ class MountTests(TestCaseBase):
                 self.assertTrue(m.isMounted())
             finally:
                 m.umount()
-                # TODO: Use libudev to wait for specific event
-                with stopwatch("Wait for udev events"):
-                    udevadm.settle(5)
 
 
 class IterMountsPerfTests(TestCaseBase):
