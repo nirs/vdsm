@@ -190,6 +190,13 @@ class TestRemoteSdIsMounted(TestCaseBase):
             self.assertTrue(mount.isMounted(
                             b"/rhev/data-center/mnt/server:_path"))
 
+    def test_is_mounted_deleted(self):
+        with fake_mounts([b"server:/path "
+                          b"/rhev/data-center/mnt/server:_path (deleted)"
+                          b"nfs4 defaults 0 0"]):
+            self.assertTrue(mount.isMounted(
+                            b"/rhev/data-center/mnt/server:_path"))
+
     def test_is_not_mounted(self):
         with fake_mounts([b"server:/path "
                           b"/rhev/data-center/mnt/server:_path "
