@@ -119,10 +119,12 @@ class TestMountHash(TestCaseBase):
         self.assertNotEqual(hash(m1), hash(m2))
 
 
+@expandPermutations
 class MountTests(TestCaseBase):
 
+    @permutations([["%03d" % i] for i in range(500)])
     @ValidateRunningAsRoot
-    def testLoopMount(self):
+    def testLoopMount(self, _):
         with namedTemporaryDir() as mpath:
             # two nested with blocks to be python 2.6 friendly
             with createFloppyImage(FLOPPY_SIZE) as path:
@@ -133,8 +135,9 @@ class MountTests(TestCaseBase):
                 finally:
                     m.umount()
 
+    @permutations([["%03d" % i] for i in range(500)])
     @ValidateRunningAsRoot
-    def testSymlinkMount(self):
+    def testSymlinkMount(self, _):
         with namedTemporaryDir() as root_dir:
             backing_image = os.path.join(root_dir, 'backing.img')
             link_to_image = os.path.join(root_dir, 'link_to_image')

@@ -159,7 +159,7 @@ class MkimageTestCase(VdsmTestCase):
         self._check_content()
 
     @ValidateRunningAsRoot
-    @permutations([[None], ['FSLABEL']])
+    @permutations([["%03d" % i] for i in range(500)] + [[None]])
     def test_mkFloppyFs(self, label):
         """
         Tests mkimage.mkFloppyFs creating an image and checking its content.
@@ -176,7 +176,7 @@ class MkimageTestCase(VdsmTestCase):
             m.umount()
 
     @ValidateRunningAsRoot
-    @permutations([[None], ['fslabel']])
+    @permutations([["%03d" % i] for i in range(500)] + [[None]])
     def test_mkIsoFs(self, label):
         """
         Tests mkimage.mkIsoFs creating an image and checking its content
