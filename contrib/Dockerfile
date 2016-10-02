@@ -21,5 +21,4 @@ RUN yum install -y http://resources.ovirt.org/pub/yum-repo/ovirt-release-master.
     python34-six \
     && \
   easy_install pip && \
-  easy_install pyflakes && \
-  pip install pep8==1.5.6
+  pip install tox mock
