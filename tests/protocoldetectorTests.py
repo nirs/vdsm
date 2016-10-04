@@ -112,6 +112,8 @@ class AcceptorTests(VdsmTestCase):
     def tearDown(self):
         if self.acceptor:
             self.acceptor.stop()
+        if self.reactor:
+            self.reactor.stop()
 
     # Testing
 

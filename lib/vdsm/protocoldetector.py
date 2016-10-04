@@ -207,7 +207,6 @@ class MultiProtocolAcceptor:
 
     def stop(self):
         self.log.debug("Stopping Acceptor")
-        self._reactor.stop()
         self._acceptor.close()
 
 
