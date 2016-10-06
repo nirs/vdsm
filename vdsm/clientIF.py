@@ -289,6 +289,7 @@ class clientIF(object):
             self._acceptor.stop()
             for binding in self.bindings.values():
                 binding.stop()
+            self._reactor.stop()
 
             self._enabled = False
             secret.clear()
