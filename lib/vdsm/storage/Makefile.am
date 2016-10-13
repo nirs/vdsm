@@ -42,6 +42,7 @@ dist_vdsmstorage_PYTHON = \
 	rwlock.py \
 	securable.py \
 	threadlocal.py \
+	vmlease.py \
 	volumemetadata.py \
 	workarounds.py \
 	$(NULL)
