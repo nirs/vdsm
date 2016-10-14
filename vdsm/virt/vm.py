@@ -213,7 +213,8 @@ class Vm(object):
                      (hwclass.SMARTCARD, vmdevices.core.Smartcard),
                      (hwclass.TPM, vmdevices.core.Tpm),
                      (hwclass.HOSTDEV, vmdevices.hostdevice.HostDevice),
-                     (hwclass.MEMORY, vmdevices.core.Memory))
+                     (hwclass.MEMORY, vmdevices.core.Memory),
+                     (hwclass.LEASE, vmdevices.lease.Device))
 
     def _emptyDevMap(self):
         return dict((dev, []) for dev, _ in self.DeviceMapping)
@@ -629,6 +630,11 @@ class Vm(object):
     def preparePaths(self):
         drives = self._devSpecMapFromConf()[hwclass.DISK]
         self._preparePathsForDrives(drives)
+
+    def _prepareLeaseDevices(self, leases):
+        for device in leases:
+            vmdevices.lease.prepare(self.cif.irs, device)
+            self.log.debug("Prepared lease device: %s", device)
 
     def _preparePathsForDrives(self, drives):
         for drive in drives:
@@ -1901,6 +1907,7 @@ class Vm(object):
         # Disk stats collection is started from clientIF at the end
         # of the recovery process.
         if not self.recovering:
+            self._prepareLeaseDevices(dev_spec_map[hwclass.LEASE])
             self._preparePathsForDrives(dev_spec_map[hwclass.DISK])
             self._prepareTransientDisks(dev_spec_map[hwclass.DISK])
             self._updateDevices(dev_spec_map)
