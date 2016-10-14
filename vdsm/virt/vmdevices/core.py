@@ -630,3 +630,55 @@ class Memory(Base):
         target.appendChild(node)
 
         return mem
+
+
+class Lease(Base):
+    """
+    VM lease device.
+
+    See https://libvirt.org/formatdomain.html#elementsLease
+    """
+    __slots__ = ("id", "sd_id", "path", "offset")
+
+    @classmethod
+    def update_device_info(cls, vm, device_conf):
+        # TODO: update conf from libvirt info
+        pass
+
+    def __init__(self, conf, log, **kwargs):
+        super(Lease, self).__init__(conf, log, **kwargs)
+        """
+        Initialize a lease element.
+
+        :param uuid id: Lease id, e.g. volume id for a volume lease, or vm id
+            for a vm lease
+        :param uuid sd_id: Storage domain uuid where lease file is located
+        :param str path: Path to lease file or block device
+        :param int offset: Offset in lease file in bytes
+        """
+        # TODO: validate arguments
+
+    def setup(self):
+        # TODO: validate lease with storage, fail if lease is not mapped to
+        # lease id.
+        pass
+
+    def getXML(self):
+        """
+        Return xml element.
+
+        <lease>
+            <key>12523e3d-ad22-410c-8977-d2a7bf458a65</key>
+            <lockspace>c2a6d7c8-8d81-4e01-9ed4-7eb670713448</lockspace>
+            <target offset="1048576"
+                    path="/dev/c2a6d7c8-8d81-4e01-9ed4-7eb670713448/leases"/>
+        </lease>
+
+        :rtype: `vmxml.Element`
+        """
+        lease = vmxml.Element('lease')
+        lease.appendChildWithArgs('key', text=self.id)
+        lease.appendChildWithArgs('lockspace', text=self.sd_id)
+        lease.appendChildWithArgs('target', path=self.path,
+                                  offset=str(self.offset))
+        return lease

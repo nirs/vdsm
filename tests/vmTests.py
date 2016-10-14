@@ -1721,6 +1721,22 @@ class SyncGuestTimeTests(TestCaseBase):
             vm._syncGuestTime()
 
 
+class TestLease(XMLTestCase):
+
+    def test_getxml(self):
+        lease = vmdevices.core.Lease({}, self.log, id="id", sd_id="sd_id",
+                                     path="/path", offset=1048576)
+        lease_xml = lease.getXML().toxml()
+        xml = """
+        <lease>
+            <key>id</key>
+            <lockspace>sd_id</lockspace>
+            <target offset="1048576" path="/path" />
+        </lease>
+        """
+        self.assertXMLEqual(lease_xml, xml)
+
+
 def _load_xml(name):
     test_path = os.path.realpath(__file__)
     data_path = os.path.join(os.path.split(test_path)[0], 'devices', 'data')

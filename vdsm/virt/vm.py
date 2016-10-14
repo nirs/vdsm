@@ -213,7 +213,8 @@ class Vm(object):
                      (hwclass.SMARTCARD, vmdevices.core.Smartcard),
                      (hwclass.TPM, vmdevices.core.Tpm),
                      (hwclass.HOSTDEV, vmdevices.hostdevice.HostDevice),
-                     (hwclass.MEMORY, vmdevices.core.Memory))
+                     (hwclass.MEMORY, vmdevices.core.Memory),
+                     (hwclass.LEASE, vmdevices.core.Lease))
 
     def _emptyDevMap(self):
         return dict((dev, []) for dev, _ in self.DeviceMapping)
@@ -1665,6 +1666,9 @@ class Vm(object):
 
         if serial_console is not None:
             domxml._devices.appendChild(serial_console.getSerialDeviceXML())
+
+        for lease in self._devices[hwclass.LEASE]:
+            domxml._devices.appendChild(lease.getXML())
 
         for drive in self._devices[hwclass.DISK][:]:
             for leaseElement in drive.getLeasesXML():

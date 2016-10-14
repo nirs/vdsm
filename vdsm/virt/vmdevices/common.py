@@ -86,5 +86,6 @@ def update_device_info(vm, devices):
     core.Console.update_device_info(vm, devices[hwclass.CONSOLE])
     hostdevice.HostDevice.update_device_info(vm, devices[hwclass.HOSTDEV])
     core.Memory.update_device_info(vm, devices[hwclass.MEMORY])
+    core.Lease.update_device_info(vm, devices[hwclass.LEASE])
     # Obtain info of all unknown devices. Must be last!
     _update_unknown_device_info(vm)
