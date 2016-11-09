@@ -18,6 +18,7 @@
 # Refer to the README and COPYING files for full details of the license
 #
 
+import io
 import json
 import os
 import pprint
@@ -448,12 +449,11 @@ class TestMap(TestCaseBase):
         (qemuimg.FORMAT.QCOW2, "0.10"),
         (qemuimg.FORMAT.QCOW2, "1.1"),
     ])
-    def test_empty_image(self, format, qcow2_compat):
+    def test_empty_image(self, fmt, qcow2_compat):
         with namedTemporaryDir() as tmpdir:
             size = 1048576
             image = os.path.join(tmpdir, "base.img")
-            qemuimg.create(image, size=size, format=format,
-                           qcow2Compat=qcow2_compat)
+            make_empty_image(image, size, fmt, qcow2_compat)
 
             expected = [
                 # single run - empty
@@ -480,8 +480,7 @@ class TestMap(TestCaseBase):
             offset = 64 * 1024
             image = os.path.join(tmpdir, "base.img")
             fmt = qemuimg.FORMAT.RAW
-            qemuimg.create(image, size=size, format=fmt,
-                           qcow2Compat=qcow2_compat)
+            make_empty_image(image, size, fmt, qcow2_compat)
             qemu_pattern_write(image, fmt, offset=offset, len=length,
                                pattern=0xf0)
 
@@ -525,8 +524,7 @@ class TestMap(TestCaseBase):
             image = os.path.join(tmpdir, "base.img")
             fmt = qemuimg.FORMAT.QCOW2
             size = 1048576
-            qemuimg.create(image, size=size, format=fmt,
-                           qcow2Compat=qcow2_compat)
+            make_empty_image(image, size, fmt, qcow2_compat)
             qemu_pattern_write(image, fmt, offset=offset, len=length,
                                pattern=0xf0)
 
@@ -570,11 +568,22 @@ class TestMap(TestCaseBase):
 
 
 def make_image(path, size, format, index, qcow2_compat, backing=None):
-    qemuimg.create(path, size=size, format=format, qcow2Compat=qcow2_compat,
-                   backing=backing)
+    make_empty_image(path, size, format, qcow2_compat, backing=backing)
     offset = index * 1024
     qemu_pattern_write(path, format, offset=offset, len=1024,
                        pattern=0xf0 + index)
+
+
+def make_empty_image(path, size, format, qcow2_compat, backing=None):
+    # This is the way we created images on both file and block based storage.
+    # Using qemu-img to create raw images may lead to different results on some
+    # tests environment (e.g. travis-ci).
+    if format == qemuimg.FORMAT.RAW:
+        with io.open(path, "wb") as f:
+            f.truncate(size)
+    else:
+        qemuimg.create(path, size=size, format=format,
+                       qcow2Compat=qcow2_compat, backing=backing)
 
 
 class MapMismatch(AssertionError):
