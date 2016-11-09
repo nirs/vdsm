@@ -18,6 +18,7 @@
 # Refer to the README and COPYING files for full details of the license
 #
 
+from __future__ import print_function
 import io
 import json
 import os
@@ -34,8 +35,12 @@ from vdsm.common import exception
 from vdsm import qemuimg
 from vdsm import commands
 
-QEMU_IMG = qemuimg._qemuimg.cmd
+# We don't import this from storage.constants since qemuimg is not part of the
+# storage package.
+# TODO: Support 4K disks
+BLOCK_SIZE = 512
 
+QEMU_IMG = qemuimg._qemuimg.cmd
 CONFIG = make_config([('irs', 'qcow2_compat', '0.10')])
 
 
@@ -442,16 +447,44 @@ class TestCommit(TestCaseBase):
 @expandPermutations
 class TestMap(TestCaseBase):
 
-    @permutations([
-        # format, qcow2_compat
-        (qemuimg.FORMAT.RAW, "0.10"),
-        (qemuimg.FORMAT.RAW, "1.1"),
-        (qemuimg.FORMAT.QCOW2, "0.10"),
-        (qemuimg.FORMAT.QCOW2, "1.1"),
-    ])
-    def test_empty_image(self, fmt, qcow2_compat):
+    @permutations([("0.10",), ("1.1",)])
+    def test_empty_image_raw(self, qcow2_compat):
         with namedTemporaryDir() as tmpdir:
             size = 1048576
+            fmt = qemuimg.FORMAT.RAW
+            image = os.path.join(tmpdir, "base.img")
+            make_empty_image(image, size, fmt, qcow2_compat)
+
+            if is_sparse(image):
+                self.log.info("testing sparse image")
+                expected = [
+                    # single run - empty
+                    {
+                        "start": 0,
+                        "length": size,
+                        "data": False,
+                        "zero": True,
+                    },
+                ]
+            else:
+                self.log.info("testing non-sparse image")
+                expected = [
+                    # single run - full
+                    {
+                        "start": 0,
+                        "length": size,
+                        "data": True,
+                        "zero": False,
+                    },
+                ]
+
+            self.check_map(qemuimg.map(image), expected)
+
+    @permutations([("0.10",), ("1.1",)])
+    def test_empty_image_qcow2(self, qcow2_compat):
+        with namedTemporaryDir() as tmpdir:
+            size = 1048576
+            fmt = qemuimg.FORMAT.QCOW2
             image = os.path.join(tmpdir, "base.img")
             make_empty_image(image, size, fmt, qcow2_compat)
 
@@ -484,30 +517,43 @@ class TestMap(TestCaseBase):
             qemu_pattern_write(image, fmt, offset=offset, len=length,
                                pattern=0xf0)
 
-            expected = [
-                # run 1 - empty
-                {
-                    "start": 0,
-                    "length": offset,
-                    "data": False,
-                    "zero": True,
-                },
-                # run 2 - data
-                {
-                    "start": offset,
-                    "offset": offset,
-                    "length": length,
-                    "data": True,
-                    "zero": False,
-                },
-                # run 3 - empty
-                {
-                    "start": offset + length,
-                    "length": size - offset - length,
-                    "data": False,
-                    "zero": True,
-                },
-            ]
+            if is_sparse(image):
+                self.log.info("testing sparse image")
+                expected = [
+                    # run 1 - empty
+                    {
+                        "start": 0,
+                        "length": offset,
+                        "data": False,
+                        "zero": True,
+                    },
+                    # run 2 - data
+                    {
+                        "start": offset,
+                        "offset": offset,
+                        "length": length,
+                        "data": True,
+                        "zero": False,
+                    },
+                    # run 3 - empty
+                    {
+                        "start": offset + length,
+                        "length": size - offset - length,
+                        "data": False,
+                        "zero": True,
+                    },
+                ]
+            else:
+                self.log.info("testing non-sparse image")
+                expected = [
+                    # single run - full
+                    {
+                        "start": 0,
+                        "length": size,
+                        "data": True,
+                        "zero": False,
+                    },
+                ]
 
             self.check_map(qemuimg.map(image), expected)
 
@@ -584,6 +630,12 @@ def make_empty_image(path, size, format, qcow2_compat, backing=None):
     else:
         qemuimg.create(path, size=size, format=format,
                        qcow2Compat=qcow2_compat, backing=backing)
+
+
+def is_sparse(path):
+    st = os.lstat(path)
+    print("blocks=%d, size=%d" % (st.st_blocks, st.st_size))
+    return st.st_blocks < st.st_size // BLOCK_SIZE
 
 
 class MapMismatch(AssertionError):
