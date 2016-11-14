@@ -1645,3 +1645,6 @@ class SDM(APIBase):
 
     def copy_data(self, job_id, source, destination):
         return self._irs.sdm_copy_data(job_id, source, destination)
+
+    def amend_image(self, job_id, img_info, vol_attr):
+        return self._irs.sdm_amend_image(job_id, img_info, vol_attr)

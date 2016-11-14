@@ -3537,3 +3537,9 @@ class HSM(object):
         job = sdm.api.copy_data.Job(job_id, self._get_hostid(),
                                     source, destination)
         self.sdm_schedule(job)
+
+    @public
+    def sdm_amend_image(self, job_id, img_info, vol_attr):
+        job = sdm.api.amend_image.Job(job_id, self._get_hostid(),
+                                      img_info, vol_attr)
+        self.sdm_schedule(job)
