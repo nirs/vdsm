@@ -37,41 +37,24 @@ class Job(base.Job):
     """
     log = logging.getLogger('storage.sdm.amend_data')
 
-    def __init__(self, job_id, host_id, img_info, vol_attr):
+    def __init__(self, job_id, host_id, img_info, vol_attr, repo_path):
         super(Job, self).__init__(job_id, 'amend_data', host_id)
-        self._compat = vol_attr.compat
         self._img_info = img_info
-        self._operation = None
-
-    @property
-    def progress(self):
-        return getattr(self._operation, 'progress', None)
-
-    def _abort(self):
-        if self._operation:
-            self._operation.abort()
+        self._vol_attr = vol_attr
+        self._repo_path = repo_path
 
     def _run(self):
-        domId = self._img_info.domainID
-        vars.task.getSharedLock(sc.STORAGE, domId)
-        sd = sdCache.produce(domId)
-        imgId = self._img_info.imageID
-        if (self._img_info.volumeID is None):
-            allVols = sd.getAllVolumes()
-            imgVols = sd.getVolsOfImage(allVols, imgId)
-            for vol in imgVols:
-                vol = sd.produceVolume(imgId, vol.volUUID)
-                self._amend_volume(vol, domId)
-        else:
-            vol = sd.produceVolume(imgId, vol.volUUID)
-            self._amend_volume(vol, domId)
-        self._operation.wait_for_completion()
+        with guarded.context(self._img_info.locks):
+            with self._img_info.prepare():
+                sd = sdCache.produce_manifest(self._img_info.sd_id)
+                image_repo = Image(self._repo_path)
+                chain = image_repo.getChain(...)
 
-    def _amend_volume(self, vol, domId):
-        image_res_ns = sd.getNamespace(sc.IMAGE_NAMESPACE, domId)
-        with rm.acquireResource(image_res_ns, vol.img_id, rm.EXCLUSIVE):
-            vol.prepare()
-            try:
-                qemuimg.amend(vol, self.compat)
-            finally:
-                vol.teardown(domId, vol.volUUID)
+                # Remove raw base
+                # XXX check if base is chain[0] or chain[-1]
+                if chain[0].getFormat() != COW:
+                    chain = chain[1:]
+
+                for vol_id in chain:
+                    vol = sd.produceVolume(self._img_info.img_id, vol_id)
+                    qemuimg.amend(vol.getVolumePath(), self._vol_attr.compat)

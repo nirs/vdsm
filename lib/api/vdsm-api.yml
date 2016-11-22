@@ -7082,32 +7082,32 @@ types:
             type: uint
         type: object
 
-    ImgInfo: &ImgInfo
+    ImageInfo: &ImageInfo
         added: '4.1'
         description: Information describing an image.
                      The volume id field can be specified for a specific
                      volume or it can be empty to amend the whole image's
                      volumes.
-        name: ImgInfo
+        name: ImageInfo
         properties:
         -   description: The Storage Domain containing the Volume
-            name: domainID
+            name: sd_id
             type: *UUID
 
         -   description: The Image associated with the Volume
-            name: imageID
+            name: img_id
             type: *UUID
 
         -   description: The UUID of the Volume
-            name: volumeID
+            name: vol_id
             type: *UUID
         type: object
 
-    VolAttr: &VolAttr
+    VolumeAttributes: &VolumeAttributes
         added: '4.1'
         description: Possible attributes which are allowed to be changed
                      in a volume.
-        name: VolAttr
+        name: VolumeAttributes
         properties:
         -   description: The compat version.
             name: compat
@@ -10153,10 +10153,10 @@ SDM.amend_image:
                      Volume id can be specified for a specific volume
                      or it can be empty to amend the whole image's volumes.
         name: img_info
-        type: *ImgInfo
+        type: *ImageInfo
 
     -   description: The possible attributes which are allowed to be changed
                      in a volume.
         name: vol_attr
-        type: *VolAttr
+        type: *VolumeAttributes
 

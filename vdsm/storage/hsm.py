@@ -3523,6 +3523,16 @@ class HSM(object):
             raise se.StoragePoolNotConnected()
         return pool.id
 
+    @propety
+    def pool(self):
+        # Currently we use the pool.id as the hostid for all storage domains.
+        # If we get rid of the storage pool then we need to add an interface
+        # to fetch the hostid from the StorageDomainManifest object.
+        try:
+            return self.pools.values()[0]
+        except IndexError:
+            raise se.StoragePoolNotConnected()
+
     @public
     def sdm_create_volume(self, job_id, vol_info):
         vol_info = sdm.api.create_volume.CreateVolumeInfo(vol_info)
@@ -3540,6 +3550,7 @@ class HSM(object):
 
     @public
     def sdm_amend_image(self, job_id, img_info, vol_attr):
-        job = sdm.api.amend_image.Job(job_id, self._get_hostid(),
-                                      img_info, vol_attr)
+        job = sdm.api.amend_image.Job(job_id, self.pool.id,
+                                      img_info, vol_attr,
+                                      self.pool.repoPath)
         self.sdm_schedule(job)
