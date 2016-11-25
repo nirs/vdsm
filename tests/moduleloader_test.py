@@ -25,6 +25,7 @@ import os
 import sys
 from vdsm import moduleloader
 from vdsm import utils
+from testValidation import broken_on_ci
 from testlib import permutations, expandPermutations, namedTemporaryDir
 from testlib import VdsmTestCase as TestCaseBase
 
@@ -41,6 +42,7 @@ class ImportModulesTest(TestCaseBase):
             sys.path.append(os.path.dirname(path))
             yield importlib.import_module(os.path.basename(path))
 
+    @broken_on_ci("fails on travis", name="TRAVIS_CI")
     @permutations(
         [(('a.py', 'b.py'), ('a', 'b')),
          (('a.py', 'b.py', 'a.pyc', 'a.pyioas'), ('a', 'b')),
