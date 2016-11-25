@@ -223,7 +223,6 @@ blacklist_modules_python3 = \
 	storage_mailbox_test.py \
 	storage_misc_test.py \
 	storage_monitor_test.py \
-	storage_mount_test.py \
 	storage_outofprocess_test.py \
 	storage_persistentdict_test.py \
 	storage_resourcemanager_test.py \
