@@ -31,11 +31,11 @@ from testlib import VdsmTestCase as TestCaseBase
 @expandPermutations
 class ImportModulesTest(TestCaseBase):
 
-    @permutations(
-        [(('a.py', 'b.py'), ('a', 'b')),
-         (('a.py', 'b.py', 'a.pyioas'), ('a', 'b')),
-         (('a.py', 'b.py', '_my.py'), ('a', 'b', '_my'))]
-    )
+    @permutations([
+        (('a.py', 'b.py'), ('a', 'b')),
+        (('a.py', 'b.py', 'a.pyioas'), ('a', 'b')),
+        (('a.py', 'b.py', '_my.py'), ('a', 'b', '_my')),
+    ])
     @forked
     def test_import_modules(self, files, expected_modules):
         with namedTemporaryDir() as path:
