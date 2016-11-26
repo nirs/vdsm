@@ -19,7 +19,6 @@
 #
 
 from __future__ import print_function
-from contextlib import contextmanager
 import importlib
 import os
 import sys
@@ -33,15 +32,6 @@ from testlib import VdsmTestCase as TestCaseBase
 @expandPermutations
 class ImportModulesTest(TestCaseBase):
 
-    @contextmanager
-    def _setup_test_modules(self, files):
-        with namedTemporaryDir() as path:
-            for f in files:
-                utils.touchFile(os.path.join(path, f))
-            utils.touchFile(os.path.join(path, '__init__.py'))
-            sys.path.append(os.path.dirname(path))
-            yield importlib.import_module(os.path.basename(path))
-
     @permutations(
         [(('a.py', 'b.py'), ('a', 'b')),
          (('a.py', 'b.py', 'a.pyioas'), ('a', 'b')),
@@ -50,8 +40,13 @@ class ImportModulesTest(TestCaseBase):
     )
     @forked
     def test_import_modules(self, files, expected_modules):
-        with self._setup_test_modules(files) as module_name:
-            result = moduleloader.load_modules(module_name)
+        with namedTemporaryDir() as path:
+            for f in files:
+                utils.touchFile(os.path.join(path, f))
+            utils.touchFile(os.path.join(path, '__init__.py'))
+            sys.path.append(os.path.dirname(path))
+            pkg = importlib.import_module(os.path.basename(path))
+            result = moduleloader.load_modules(pkg)
 
         result = frozenset(result.keys())
         expected = frozenset(expected_modules)
