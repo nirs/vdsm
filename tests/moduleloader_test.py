@@ -43,7 +43,7 @@ class ImportModulesTest(TestCaseBase):
             for f in files:
                 utils.touchFile(os.path.join(path, f))
             utils.touchFile(os.path.join(path, '__init__.py'))
-            sys.path.append(os.path.dirname(path))
+            sys.path.insert(0, os.path.dirname(path))
             pkg = importlib.import_module(os.path.basename(path))
             result = moduleloader.load_modules(pkg)
 
