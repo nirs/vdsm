@@ -127,7 +127,7 @@ class FakeBlockEnvTests(VdsmTestCase):
             md_path = env.lvm.lvPath(vg_name, sd.METADATA)
             self.assertTrue(os.path.exists(md_path))
 
-            for lv in blockSD.SPECIAL_LVS:
+            for lv in env.sd_manifest.special_volumes:
                 self.assertEqual(lv, env.lvm.getLV(vg_name, lv).name)
 
             images_dir = os.path.join(env.sd_manifest.domaindir,

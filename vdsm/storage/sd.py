@@ -31,6 +31,7 @@ from vdsm.storage import constants as sc
 from vdsm.storage import exception as se
 from vdsm.storage import misc
 from vdsm.storage import outOfProcess as oop
+from vdsm.storage import xlease
 from vdsm.storage.persistent import unicodeEncoder, unicodeDecoder
 
 import image
@@ -38,6 +39,7 @@ import resourceFactories
 import resourceManager as rm
 from vdsm import constants
 from vdsm import qemuimg
+from vdsm import utils
 
 from vdsm.config import config
 
@@ -59,11 +61,22 @@ IDS = "ids"
 INBOX = "inbox"
 OUTBOX = "outbox"
 
+# External leases volume for vm leases and other leases not attached to
+# volumes.
+XLEASES = "xleases"
+
+# Special volumes available since storage domain version 0
+SPECIAL_VOLUMES_V0 = (METADATA, LEASES, IDS, INBOX, OUTBOX)
+
+# Special volumes available since storage domain version 4.
+SPECIAL_VOLUMES_V4 = SPECIAL_VOLUMES_V0 + (XLEASES,)
+
 SPECIAL_VOLUME_SIZES_MIB = {
     LEASES: 2048,
     IDS: 8,
     INBOX: 16,
     OUTBOX: 16,
+    XLEASES: 1024,
 }
 
 # Storage Domain Types
@@ -315,6 +328,10 @@ class StorageDomainManifest(object):
         self.domaindir = domaindir
         self.replaceMetadata(metadata)
         self._domainLock = self._makeDomainLock()
+
+    @property
+    def special_volumes(self):
+        raise NotImplementedError
 
     @property
     def oop(self):
@@ -576,6 +593,10 @@ class StorageDomain(object):
     @property
     def manifest(self):
         return self._manifest
+
+    @property
+    def special_volumes(self):
+        return self._manifest.special_volumes
 
     def replaceMetadata(self, md):
         """
@@ -1043,3 +1064,37 @@ class StorageDomain(object):
         (on NFS mostly) due to lazy file removal
         """
         pass
+
+    # Exeternal leases support
+
+    @classmethod
+    def format_external_leases(cls, lockspace, path):
+        """
+        Format the special xleases volume.
+
+        Called when creating a new storage domain, or when upgrading storage
+        domain to version 4.
+
+        WARNING: destructive operation, must not be called on active external
+        leases volume.
+
+        TODO: should move to storage domain subclasses os each subclass can use
+        its own backend.
+        """
+        backend = xlease.DirectFile(path)
+        with utils.closing(backend):
+            xlease.format_index(lockspace, backend)
+
+    def external_leases_path(self):
+        """
+        Return the path to te external leases volume.
+        """
+        raise NotImplementedError
+
+    def create_external_leases(self):
+        """
+        Create the external leases special volume.
+
+        Called during upgrade from version 3 to version 4.
+        """
+        raise NotImplementedError
