@@ -375,8 +375,9 @@ def make_leases():
 
 
 def write_records(records, lockspace, file):
-    index = xlease.VolumeIndex(file)
+    index = xlease.VolumeIndex()
     with utils.closing(index):
+        index.load(file)
         for recnum, record in records:
             block = index.copy_record_block(recnum)
             with utils.closing(block):
