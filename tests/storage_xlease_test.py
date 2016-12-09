@@ -359,7 +359,7 @@ def make_volume(*records):
         with utils.closing(file):
             xlease.format_index(lockspace, file)
             if records:
-                write_records(records, lockspace, file)
+                write_records(records, file)
             vol = xlease.LeasesVolume(file)
             with utils.closing(vol):
                 yield vol
@@ -374,7 +374,7 @@ def make_leases():
         yield path
 
 
-def write_records(records, lockspace, file):
+def write_records(records, file):
     index = xlease.VolumeIndex()
     with utils.closing(index):
         index.load(file)
