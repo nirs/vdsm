@@ -343,7 +343,22 @@ def v3DomainConverter(repoPath, hostId, domain, isMsd):
 
 def v4DomainConverter(repoPath, hostId, domain, isMsd):
     targetVersion = 4
+
+    # Try to create and format the new external leases volume. If this fail,
+    # the conversion will fail and the domain will remain in version 3.  If the
+    # volume exists (leftover from previous upgrade), we reuse it.
+    domain.create_external_leases()
+
+    # We have either a new or existing volume. Always format it to make sure it
+    # is properly formatted - formatting is cheap.
+    domain.format_external_leases(domain.sdUUID, domain.external_leases_path())
+
+    # We have now a good external leases volume, try to change the domain
+    # version to 4. If this fail, conversion will fail, and the domain will
+    # remain in version 3 with unused external leases volume.  Converting the
+    # domain again will resuse the external leases volume.
     domain.setMetaParam(sd.DMDK_VERSION, targetVersion)
+
     log.debug("Conversion of domain %s to version = %s has been completed.",
               domain.sdUUID, targetVersion)
 

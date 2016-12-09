@@ -26,6 +26,9 @@ from testlib import recorded
 from storage import blockSD, fileSD, image, fileVolume, blockVolume
 
 
+FAKE_SPECIAL_VOLUMES = ()
+
+
 class FakeDomainManifest(object):
     def __init__(self):
         self.sdUUID = 'a6ecac0a-5c6b-46d7-9ba5-df8b34df2d01'
@@ -33,6 +36,10 @@ class FakeDomainManifest(object):
         self.mountpoint = '/a/b'
         self._metadata = {}
         self.__class__.__class_calls__ = []
+
+    @property
+    def special_volumes(self):
+        return FAKE_SPECIAL_VOLUMES
 
     @recorded
     def replaceMetadata(self, md):
@@ -658,6 +665,7 @@ class DomainTestMixin(object):
         ['domaindir', '/a/b/c'],
         ['_metadata', {}],
         ['mountpoint', '/a/b'],
+        ['special_volumes', FAKE_SPECIAL_VOLUMES],
     ])
     def test_property(self, prop, val):
         self.assertEqual(getattr(self.domain, prop), val)

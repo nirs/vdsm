@@ -50,12 +50,13 @@ FILE_SD_MD_FIELDS[REMOTE_PATH] = (str, str)
 
 METADATA_PERMISSIONS = 0o660
 
-# On file domains IDS and LEASES volumes don't need a fixed size (they are
+# On file domains sanlock volumes don't need a fixed size (they are
 # allocated as we use them)
 FILE_SPECIAL_VOLUME_SIZES_MIB = sd.SPECIAL_VOLUME_SIZES_MIB.copy()
 FILE_SPECIAL_VOLUME_SIZES_MIB.update({
     sd.IDS: 0,
     sd.LEASES: 0,
+    sd.XLEASES: 0,
 })
 
 # Specific stat(2) block size as defined in the man page
@@ -64,6 +65,13 @@ ST_BYTES_PER_BLOCK = 512
 _MOUNTLIST_IGNORE = ('/' + sd.BLOCKSD_DIR, '/' + sd.GLUSTERSD_DIR)
 
 getProcPool = oop.getGlobalProcPool
+
+
+def special_volumes(version):
+    if version >= 4:
+        return sd.SPECIAL_VOLUMES_V4
+    else:
+        return sd.SPECIAL_VOLUMES_V0
 
 
 def validateDirAccess(dirPath):
@@ -170,6 +178,10 @@ class FileStorageDomainManifest(sd.StorageDomainManifest):
 
         if not self.oop.fileUtils.pathExists(self.metafile):
             raise se.StorageDomainMetadataNotFound(self.sdUUID, self.metafile)
+
+    @property
+    def special_volumes(self):
+        return special_volumes(self.getVersion())
 
     def getMonitoringPath(self):
         return self.metafile
@@ -404,14 +416,20 @@ class FileStorageDomain(sd.StorageDomain):
         procPool = oop.getProcessPool(sdUUID)
         procPool.fileUtils.createdir(metadataDir, 0o775)
 
-        for metaFile, metaSize in FILE_SPECIAL_VOLUME_SIZES_MIB.iteritems():
-            try:
-                procPool.truncateFile(
-                    os.path.join(metadataDir, metaFile),
-                    metaSize * constants.MEGAB, METADATA_PERMISSIONS)
-            except Exception as e:
-                raise se.StorageDomainMetadataCreationError(
-                    "create meta file '%s' failed: %s" % (metaFile, str(e)))
+        special = special_volumes(version)
+        for name, size_mb in FILE_SPECIAL_VOLUME_SIZES_MIB.iteritems():
+            if name in special:
+                try:
+                    procPool.truncateFile(
+                        os.path.join(metadataDir, name),
+                        size_mb * constants.MEGAB, METADATA_PERMISSIONS)
+                except Exception as e:
+                    raise se.StorageDomainMetadataCreationError(
+                        "create meta file '%s' failed: %s" % (name, str(e)))
+
+        if sd.XLEASES in special:
+            xleases_path = os.path.join(metadataDir, sd.XLEASES)
+            cls.format_external_leases(sdUUID, xleases_path)
 
         metaFile = os.path.join(metadataDir, sd.METADATA)
 
@@ -714,6 +732,27 @@ class FileStorageDomain(sd.StorageDomain):
         Return a type specific volume generator object
         """
         return fileVolume.FileVolume
+
+    # Exeternal leases support
+
+    def external_leases_path(self):
+        return os.path.join(self.getMDPath(), sd.XLEASES)
+
+    def create_external_leases(self):
+        """
+        Create the external leases special volume.
+
+        Called during upgrade from version 3 to version 4.
+        """
+        proc = oop.getProcessPool(self.sdUUID)
+        path = self.external_leases_path()
+        size = FILE_SPECIAL_VOLUME_SIZES_MIB[sd.XLEASES] * constants.MEGAB
+        self.log.info("Creating external leases volume %s", path)
+        try:
+            proc.truncateFile(path, size, METADATA_PERMISSIONS, creatExcl=True)
+        except OSError as e:
+            if e.rrrno == errno.EEXIST:
+                self.log.info("Rusing external leases volume %s", path)
 
 
 def _getMountsList(pattern="*"):
