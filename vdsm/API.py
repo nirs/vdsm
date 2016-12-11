@@ -1659,3 +1659,22 @@ class SDM(APIBase):
 
     def finalize_merge(self, job_id, subchain_info):
         return self._irs.sdm_finalize_merge(job_id, subchain_info)
+
+
+class Lease(APIBase):
+    ctorArgs = []
+
+    def create(self, lease):
+        return self._irs.create_lease(lease)
+
+    def delete(self, lease):
+        return self._irs.delete_lease(lease)
+
+    def info(self, lease):
+        return self._irs.lease_info(lease)
+
+    def status(self, lease):
+        return self._irs.lease_status(lease)
+
+    def rebuild(self, sd_id):
+        return self._irs.rebuild_leases(sd_id)
