@@ -347,6 +347,11 @@ class FileStorageDomainManifest(sd.StorageDomainManifest):
         path = vol.getVolumePath() + LEASE_FILEEXT
         return clusterlock.Lease(volUUID, path, fileVolume.LEASE_FILEOFFSET)
 
+    # External leases support
+
+    def external_leases_path(self):
+        return os.path.join(self.getMDPath(), sd.XLEASES)
+
 
 class FileStorageDomain(sd.StorageDomain):
     manifestClass = FileStorageDomainManifest
@@ -733,10 +738,7 @@ class FileStorageDomain(sd.StorageDomain):
         """
         return fileVolume.FileVolume
 
-    # Exeternal leases support
-
-    def external_leases_path(self):
-        return os.path.join(self.getMDPath(), sd.XLEASES)
+    # External leases support
 
     def create_external_leases(self):
         """
@@ -752,7 +754,7 @@ class FileStorageDomain(sd.StorageDomain):
             proc.truncateFile(path, size, METADATA_PERMISSIONS, creatExcl=True)
         except OSError as e:
             if e.rrrno == errno.EEXIST:
-                self.log.info("Rusing external leases volume %s", path)
+                self.log.info("Reusing external leases volume %s", path)
 
 
 def _getMountsList(pattern="*"):
