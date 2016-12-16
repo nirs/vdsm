@@ -46,6 +46,7 @@ dist_vdsmstorage_PYTHON = \
 	persistent.py \
 	rwlock.py \
 	securable.py \
+	statedir.py \
 	threadPool.py \
 	threadlocal.py \
 	volumemetadata.py \

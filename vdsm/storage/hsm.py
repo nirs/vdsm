@@ -54,6 +54,7 @@ from vdsm.storage import iscsi
 from vdsm.storage import misc
 from vdsm.storage import mount
 from vdsm.storage import outOfProcess as oop
+from vdsm.storage import statedir
 from vdsm.storage.constants import STORAGE
 from vdsm.storage.constants import SECTOR_SIZE
 from vdsm.storage.misc import deprecated
@@ -362,6 +363,7 @@ class HSM(object):
         mountBasePath = os.path.join(self.storage_repository,
                                      sd.DOMAIN_MNT_POINT)
         fileUtils.createdir(mountBasePath)
+        statedir.create()
         storageServer.MountConnection.setLocalPathBase(mountBasePath)
         storageServer.LocalDirectoryConnection.setLocalPathBase(mountBasePath)
 
@@ -1050,6 +1052,7 @@ class HSM(object):
             res = pool.connect(hostID, msdUUID, masterVersion)
             if res:
                 self.setPool(pool)
+                statedir.write("host_id", pool.id)
             return res
 
     @public
