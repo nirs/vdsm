@@ -37,6 +37,7 @@ dist_vdsmtool_PYTHON = \
 	unified_persistence.py \
 	upgrade.py \
 	vdsm-id.py \
+	xleases.py \
 	$(NULL)
 
 CLEANFILES = \
