@@ -338,6 +338,7 @@ class TestNetinfo(TestCaseBase):
         gateway = routes.get_gateway(DUPLICATED_GATEWAY, TEST_IFACE)
         self.assertEqual(gateway, '12.34.56.1')
 
+    @broken_on_ci("Fails on ci randomly for months")
     @attr(type='integration')
     @ValidateRunningAsRoot
     def test_ip_info(self):
