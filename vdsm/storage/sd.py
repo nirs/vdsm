@@ -1178,6 +1178,18 @@ class StorageDomain(object):
             with _external_leases_volume(path) as vol:
                 vol.remove(lease_id)
 
+    def rebuild_external_leases(self):
+        """
+        Rebuild the external leases volume index from volume contents.
+
+        Must be called only on the SPM.
+        """
+        with self._manifest.external_leases_lock.exclusive:
+            path = self.external_leases_path()
+            backend = xlease.DirectFile(path)
+            with utils.closing(backend):
+                xlease.rebuild_index(self.sdUUID, backend)
+
 
 @contextmanager
 def _external_leases_volume(path):
