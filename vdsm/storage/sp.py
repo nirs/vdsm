@@ -2072,3 +2072,10 @@ class StoragePool(object):
             # We cannot fail the task as engine is not checking tasks errors.
             self.log.info("Lease already deleted: %s:%s",
                           lease.sd_id, lease.lease_id)
+
+    def rebuild_leases(self, sd_id):
+        """
+        SPM task function for rebuilding the external leases volume.
+        """
+        dom = sdCache.produce(sd_id)
+        dom.rebuild_external_leases()
