@@ -36,6 +36,7 @@ import libvirt
 
 # vdsm imports
 from vdsm.common import api
+from vdsm.common import exception
 from vdsm.common import response
 from vdsm import concurrent
 from vdsm import constants
@@ -2981,6 +2982,88 @@ class Vm(object):
 
         return {'status': doneCode, 'vmList': self.status()}
 
+    @api.logged(on='vdsm.api')
+    def hotplugLease(self, params):
+        if self.isMigrating():
+            raise exception.MigrationInProgress()
+
+        vmdevices.lease.prepare(self.cif.irs, [params])
+        lease = vmdevices.lease.Device(self.conf, self.log, **params)
+
+        leaseXml = vmxml.format_xml(lease.getXML(), pretty=True)
+        self.log.info("Hotplug lease xml: %s" % (leaseXml))
+
+        try:
+            self._dom.attachDevice(leaseXml)
+        except libvirt.libvirtError as e:
+            if e.get_error_code() == libvirt.VIR_ERR_NO_DOMAIN:
+                raise exception.NoSuchVM()
+            # TODO: add excpetion for hotplug lease
+            raise exception.HotplugDiskFailed(str(e))
+
+        self._devices[hwclass.LEASE].append(lease)
+
+        with self._confLock:
+            self.conf['devices'].append(params)
+
+        # Note: may fail, we update the conf later during recovery.
+        self.log.debug("Saving state")
+        self.saveState()
+
+        return {'status': doneCode, 'vmList': self.status()}
+
+    @api.logged(on='vdsm.api')
+    def hotunplugLease(self, params):
+        if self.isMigrating():
+            raise exception.MigrationInProgress()
+
+        # TODO: LookupError should be public error, using hotunplugDisk here is
+        # wrong, since we did not try to unplug.
+        self.log.debug("Looking up lease %s", params)
+        try:
+            lease = self._findLeaseDevice(params)
+        except LookupError:
+            raise exception.HotunplugDiskFailed("Lease not found")
+        self.log.debug("Found lease device %s", lease)
+
+        # This assumes that the lease is always prepared - is it possible that
+        # the lease device will not be prepared? maybe in recovery flow?
+
+        leaseXml = vmxml.format_xml(lease.getXML(), pretty=True)
+        self.log.info("Hotunplug lease xml: %s", leaseXml)
+
+        try:
+            self._dom.detachDevice(leaseXml)
+            self._waitForDeviceRemoval(lease)
+        except HotunplugTimeout as e:
+            raise exception.HotunplugDiskFailed("%s" % e)
+        except libvirt.libvirtError as e:
+            if e.get_error_code() == libvirt.VIR_ERR_NO_DOMAIN:
+                raise exception.NoSuchVM()
+            raise exception.HotunplugDiskFailed("%s" % e)
+
+        self._devices[hwclass.LEASE].remove(lease)
+
+        # TODO:
+        # - handle the case when a lease does not exists in the conf.
+        # - move to helper for finding lease conf
+        self.log.debug("Looking up lease conf")
+        for dev in self.conf['devices'][:]:
+            if (dev['type'] == hwclass.LEASE and
+                    dev['sd_id'] == lease.sd_id and
+                    dev['lease_id'] == lease.lease_id):
+                self.log.debug("Found lease conf %s", dev)
+                with self._confLock:
+                    self.conf['devices'].remove(dev)
+                break
+
+        # TODO: save only if lease was removed
+        # Note: may fail, we update the conf later during recovery.
+        self.log.debug("Saving state")
+        self.saveState()
+
+        return {'status': doneCode, 'vmList': self.status()}
+
     def _waitForDeviceRemoval(self, device):
         """
         As stated in libvirt documentary, after detaching a device using
@@ -2999,15 +3082,14 @@ class Vm(object):
         :param device: Device to wait for
         """
         self.log.debug("Waiting for hotunplug to finish")
-        with utils.stopwatch("Hotunplug device %s" % device.name):
+        with utils.stopwatch("Hotunplug %s" % device):
             deadline = (utils.monotonic_time() +
                         config.getfloat('vars', 'hotunplug_timeout'))
             sleep_time = config.getfloat('vars', 'hotunplug_check_interval')
             while device.is_attached_to(self._dom.XMLDesc(0)):
                 time.sleep(sleep_time)
                 if utils.monotonic_time() > deadline:
-                    raise HotunplugTimeout("Timeout detaching device %s"
-                                           % device.name)
+                    raise HotunplugTimeout("Timeout detaching %s" % device)
 
     def _readPauseCode(self):
         state, reason = self._dom.state(0)
@@ -3217,6 +3299,13 @@ class Vm(object):
             if device['type'] == hwclass.DISK and device.get("name") == name:
                 return device
         raise LookupError("No such disk %r" % name)
+
+    def _findLeaseDevice(self, params):
+        for device in self._devices[hwclass.LEASE][:]:
+            if (device.sd_id == params["sd_id"] and
+                    device.lease_id == params["lease_id"]):
+                return device
+        raise LookupError("No such lease: '%s'" % params)
 
     def updateDriveVolume(self, vmDrive):
         if not vmDrive.device == 'disk' or not isVdsmImage(vmDrive):

@@ -471,6 +471,24 @@ class VM(APIBase):
 
         return curVm.hotunplugDisk(params)
 
+    @api.method
+    def hotplugLease(self, lease):
+        try:
+            curVm = self._cif.vmContainer[self._UUID]
+        except KeyError:
+            raise exception.NoSuchVM()
+
+        return curVm.hotplugLease(lease)
+
+    @api.method
+    def hotunplugLease(self, lease):
+        try:
+            curVm = self._cif.vmContainer[self._UUID]
+        except KeyError:
+            raise exception.NoSuchVM()
+
+        return curVm.hotunplugLease(lease)
+
     def hotplugMemory(self, params):
         try:
             utils.validateMinimalKeySet(params, ('vmId', 'memory'))
