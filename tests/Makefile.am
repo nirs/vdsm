@@ -149,6 +149,7 @@ test_modules = \
 	testlibTests.py \
 	toolTests.py \
 	toolBondingTests.py \
+	tool_confmeta_test.py \
 	transportWrapperTests.py \
 	throttledlog_test.py \
 	unicode_test.py \
