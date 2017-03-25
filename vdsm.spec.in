@@ -300,6 +300,7 @@ Requires:       %{name}-api = %{version}-%{release}
 BuildArch:      noarch
 Requires:       python-cpopen >= 1.5
 Requires:       python-ioprocess >= 0.16.1-1
+Requires:       coreutils
 
 %description python
 Shared libraries between the various VDSM packages.
@@ -1269,6 +1270,7 @@ exit 0
 %{python_sitelib}/%{vdsm_name}/virt/__init__.py*
 %{python_sitelib}/%{vdsm_name}/virt/collectd.py*
 %{python_sitelib}/%{vdsm_name}/virt/domain_descriptor.py*
+%{python_sitelib}/%{vdsm_name}/virt/dmstats.py*
 %{python_sitelib}/%{vdsm_name}/virt/events.py*
 %{python_sitelib}/%{vdsm_name}/virt/guestagent.py*
 %{python_sitelib}/%{vdsm_name}/virt/libvirtnetwork.py*

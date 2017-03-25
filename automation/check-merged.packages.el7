@@ -1,6 +1,7 @@
 --exclude=python2-crypto-2.6.1-13*
 autoconf
 automake
+coreutils
 git
 lago
 lago-ovirt

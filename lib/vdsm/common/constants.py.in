@@ -80,6 +80,7 @@ EXT_CHOWN = '@CHOWN_PATH@'
 EXT_DD = '@DD_PATH@'
 EXT_DMIDECODE = '@DMIDECODE_PATH@'
 EXT_DMSETUP = '@DMSETUP_PATH@'
+EXT_DMSTATS = '@DMSTATS_PATH@'
 
 EXT_FENCE_PREFIX = os.path.dirname('@FENCE_AGENT_PATH@') + '/fence_'
 EXT_FSCK = '@FSCK_PATH@'
@@ -118,3 +119,4 @@ EXT_SAFELEASE = '@SAFELEASE_PATH@'
 EXT_CURL_IMG_WRAP = '@LIBEXECDIR@/curl-img-wrap'  # NOQA: E501 (potentially long line)
 EXT_FC_SCAN = '@LIBEXECDIR@/fc-scan'  # NOQA: E501 (potentially long line)
 EXT_KVM_2_OVIRT = '@LIBEXECDIR@/kvm2ovirt'  # NOQA: E501 (potentially long line)
+EXT_STDBUF = '@STDBUF_PATH@'

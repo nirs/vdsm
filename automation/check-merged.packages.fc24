@@ -1,5 +1,6 @@
 autoconf
 automake
+coreutils
 createrepo
 git
 lago
