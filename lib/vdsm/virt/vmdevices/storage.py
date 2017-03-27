@@ -32,6 +32,7 @@ from vdsm.config import config
 from vdsm import constants
 from vdsm import cpuarch
 from vdsm import utils
+from vdsm.virt import thinp
 from vdsm.virt import vmtune
 from vdsm.virt import vmxml
 
@@ -220,6 +221,14 @@ class Drive(core.Base):
         self._customize()
         self._setExtSharedState()
 
+    def setup(self):
+        if self.chunked:
+            thinp.add_volume(self.domainID, self.volumeID, self.watermarkLimit)
+
+    def teardown(self):
+        if self.chunked and os.path.exists(self.path):
+            thinp.remove_volume(self.domainID, self.volumeID)
+
     def _setExtSharedState(self):
         # We cannot use tobool here as shared can take several values
         # (e.g. none, exclusive) that would be all mapped to False.
@@ -285,7 +294,8 @@ class Drive(core.Base):
         When the LV usage reaches this limit an extension is in order (thin
         provisioning on block devices).
         """
-        return self.VOLWM_FREE_PCT * self.volExtensionChunk / 100
+        size = self.VOLWM_FREE_PCT * self.volExtensionChunk / 100
+        return utils.round(size, constants.MEGAB)
 
     def getNextVolumeSize(self, curSize, capacity):
         """

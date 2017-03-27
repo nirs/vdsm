@@ -47,7 +47,9 @@ from vdsm.panic import panic
 from vdsm.profiling import profile
 from vdsm.storage.hsm import HSM
 from vdsm.storage.dispatcher import Dispatcher
+from vdsm.virt import dmstats
 from vdsm.virt import periodic
+from vdsm.virt import thinp
 
 
 loggerConfFile = constants.P_VDSM_CONF + 'logger.conf'
@@ -105,6 +107,9 @@ def serve_clients(log):
 
         install_manhole({'irs': irs, 'cif': cif})
 
+        monitor = dmstats.Monitor()
+        thinp.start(monitor)
+
         cif.start()
 
         init_unprivileged_network_components(cif)
@@ -121,6 +126,7 @@ def serve_clients(log):
             health.stop()
             periodic.stop()
             cif.prepareForShutdown()
+            thinp.stop()
             jobs.stop()
             scheduler.stop()
     finally:

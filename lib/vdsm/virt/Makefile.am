@@ -40,6 +40,7 @@ dist_vdsmvirt_PYTHON = \
 	recovery.py \
 	sampling.py \
 	secret.py \
+	thinp.py \
 	utils.py \
 	virdomain.py \
 	vm.py \

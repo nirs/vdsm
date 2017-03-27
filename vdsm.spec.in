@@ -1281,6 +1281,7 @@ exit 0
 %{python_sitelib}/%{vdsm_name}/virt/recovery.py*
 %{python_sitelib}/%{vdsm_name}/virt/sampling.py*
 %{python_sitelib}/%{vdsm_name}/virt/secret.py*
+%{python_sitelib}/%{vdsm_name}/virt/thinp.py*
 %{python_sitelib}/%{vdsm_name}/virt/utils.py*
 %{python_sitelib}/%{vdsm_name}/virt/virdomain.py*
 %{python_sitelib}/%{vdsm_name}/virt/vm.py*
