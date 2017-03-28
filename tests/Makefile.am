@@ -92,6 +92,7 @@ test_modules = \
 	passwords_test.py \
 	periodic_test.py \
 	permutation_test.py \
+	procutils_test.py \
 	properties_test.py \
 	protocoldetector_test.py \
 	pthread_test.py \
