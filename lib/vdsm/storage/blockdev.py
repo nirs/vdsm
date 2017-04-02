@@ -39,10 +39,19 @@ from vdsm.storage import exception as se
 
 log = logging.getLogger("storage.blockdev")
 
-# Keeping the old value for now.
-# TODO: In my tests, 8m gives better performance. Test with different
-# storage backends and transport to determine the best value.
-OPTIMAL_BLOCK_SIZE = constants.MEGAB
+# Testing with netapp FC LUN, 8M seems to be the optimal size:
+#
+# # dd if=/dev/zero of=/dev/sdb bs=1M count=10240 oflag=direct
+# 10240+0 records in
+# 10240+0 records out
+# 10737418240 bytes (11 GB) copied, 53.7982 s, 200 MB/s
+#
+# # dd if=/dev/zero of=/dev/sdb bs=8M count=1280 oflag=direct
+# 1280+0 records in
+# 1280+0 records out
+# 10737418240 bytes (11 GB) copied, 33.741 s, 318 MB/s
+#
+OPTIMAL_BLOCK_SIZE = 8 * constants.MEGAB
 
 
 def zero(device_path, size=None, task=None):
