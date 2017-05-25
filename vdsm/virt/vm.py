@@ -80,7 +80,7 @@ from vdsm.virt.domain_descriptor import DomainDescriptor
 from vdsm.virt.domain_descriptor import MutableDomainDescriptor
 from vdsm.virt import vmdevices
 from vdsm.virt.vmdevices import hwclass
-from vdsm.virt.vmdevices.storage import DISK_TYPE, VolumeNotFound
+from vdsm.virt.vmdevices.storage import DISK_TYPE, VolumeNotFound, SOURCE_ATTR
 from vdsm.virt.vmpowerdown import VmShutdown, VmReboot
 from vdsm.virt.utils import isVdsmImage, cleanup_guest_socket, is_kvm
 
@@ -2369,17 +2369,17 @@ class Vm(object):
 
     def _changeDisk(self, disk_element):
         diskType = vmxml.attr(disk_element, 'type')
-        if diskType not in ['file', 'block']:
+        if diskType not in ['file', 'block', 'network']:
             return
         serial = vmxml.text(vmxml.find_first(disk_element, 'serial'))
         for vm_drive in self._devices[hwclass.DISK]:
             if vm_drive.serial == serial:
                 # update the type
-                disk_type = 'block' if vm_drive.blockDev else 'file'
+                disk_type = vm_drive.diskType
                 vmxml.set_attr(disk_element, 'type', disk_type)
                 # update the path
                 source = vmxml.find_first(disk_element, 'source')
-                disk_attr = 'dev' if vm_drive.blockDev else 'file'
+                disk_attr = SOURCE_ATTR[disk_type]
                 vmxml.set_attr(source, disk_attr, vm_drive.path)
                 # update the format (the disk might have been collapsed)
                 driver = vmxml.find_first(disk_element, 'driver')
