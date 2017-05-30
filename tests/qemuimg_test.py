@@ -371,24 +371,8 @@ class QemuImgProgressTests(TestCaseBase):
 @expandPermutations
 class TestCommit(TestCaseBase):
 
-    @permutations([
-        # qcow2_compat, base, top, use_base
-        # Merging internal volume into its parent volume in raw format
-        ("1.1", 0, 1, False),
-        ("1.1", 0, 1, True),
-        ("0.10", 0, 1, False),
-        ("0.10", 0, 1, True),
-        # Merging internal volume into its parent volume in cow format
-        ("1.1", 1, 2, True),
-        ("0.10", 1, 2, True),
-        # Merging a subchain
-        ("1.1", 1, 3, True),
-        ("0.10", 1, 3, True),
-        # Merging the entire chain into the base
-        ("1.1", 0, 3, True),
-        ("0.10", 0, 3, True)
-    ])
-    def test_commit(self, qcow2_compat, base, top, use_base):
+    @permutations([("1.1", 0, 1, False, "%04d" % i) for i in range(1000)])
+    def test_commit(self, qcow2_compat, base, top, use_base, n):
         size = 1048576
         with namedTemporaryDir() as tmpdir:
             chain = []
