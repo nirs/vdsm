@@ -601,7 +601,7 @@ class Drive(core.Base):
         """
         for vol in self.volumeChain:
             if self.diskType == DISK_TYPE.NETWORK:
-                    if vol['path'] == vol_path:
+                    if vol['path'].endswith(vol_path):
                         return vol['volumeID']
             else:
                 if os.path.realpath(vol['path']) == os.path.realpath(vol_path):
