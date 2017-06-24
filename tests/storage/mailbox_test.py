@@ -30,7 +30,6 @@ from testlib import namedTemporaryDir
 
 import vdsm.storage.mailbox as sm
 from vdsm.storage import misc
-from vdsm.utils import retry
 
 MAX_HOSTS = 10
 MAILER_TIMEOUT = 6
@@ -97,11 +96,7 @@ class TestSPMMailMonitor(VdsmTestCase):
             try:
                 threadCount = len(threading.enumerate())
                 mailer.stop()
-                mailer.run()
-
-                t = lambda: self.assertEqual(
-                    threadCount, len(threading.enumerate()))
-                retry(AssertionError, t, timeout=4, sleep=0.1)
+                self.assertEqual(threadCount, len(threading.enumerate()))
             finally:
                 self.assertTrue(
                     mailer.wait(timeout=MAILER_TIMEOUT),
