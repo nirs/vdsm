@@ -34,6 +34,10 @@ Profiling tests, showing 10 slowest tests:
 
    tox -e storage-py27 -- --durations=10
 
+Checking for tests leaking threads:
+
+   tox -e storge-py27 -- --threadleak
+
 Using pytest directly
 ---------------------
 
