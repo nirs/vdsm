@@ -33,31 +33,47 @@ def _align_offset(offset, n):
     return offset
 
 
-def _ctz32(val):
-    # Binary search for the trailing one bit.
-    cnt = 0
-    if not (val & 0x0000FFFF):
-        cnt += 16
-        val >>= 16
-    if not (val & 0x000000FF):
-        cnt += 8
-        val >>= 8
-    if not (val & 0x0000000F):
-        cnt += 4
-        val >>= 4
-    if not (val & 0x00000003):
-        cnt += 2
-        val >>= 2
-    if not (val & 0x00000001):
-        cnt += 1
-        val >>= 1
-    if not (val & 0x00000001):
-        cnt += 1
-    return cnt
-
-
 def _div_round_up(n, d):
     return (n + d - 1) // d
+
+
+def _refcount_metadata_size(clusters, cluster_size, refcount_order):
+    """
+    Calculate the size of the refcount blocks.
+
+    Every host cluster is reference-counted, including metadata (even
+    refcount metadata is recursively included).
+
+    An accurate formula for the size of refcount metadata size is difficult
+    to derive.  An easier method of calculation is finding the fixed point
+    where no further refcount blocks or table clusters are required to
+    reference count every cluster.
+
+    This is a porting of qemu source to Python.
+
+    Arguments:
+        clusters (int): number of clusters to refcount (including data and
+            L1/L2 tables)
+        cluster_size (int): size of a cluster, in bytes
+        refcount_order (int): refcount bits power-of-2 exponent
+
+    Returns:
+        Number of bytes required for refcount blocks and table metadata.
+    """
+    blocks_per_table_cluster = cluster_size // SIZEOF_INT_64
+    refcounts_per_block = cluster_size * 8 // (1 << refcount_order)
+    table = 0   # number of refcount table clusters
+    blocks = 0  # number of refcount block clusters
+    last = None
+    n = 0
+
+    while n != last:
+        last = n
+        blocks = _div_round_up(clusters + table + blocks, refcounts_per_block)
+        table = _div_round_up(blocks, blocks_per_table_cluster)
+        n = clusters + blocks + table
+
+    return (blocks + table) * cluster_size
 
 
 def _estimate_metadata_size(virtual_size):
@@ -65,17 +81,8 @@ def _estimate_metadata_size(virtual_size):
     This code is ported from the qemu calculation implemented in block/qcow2.c
     in the method qcow2_create2
     """
-    # cluster_bits = ctz32(cluster_size);
-    cluster_bits = _ctz32(CLUSTER_SIZE)
-
     # int64_t aligned_total_size = align_offset(total_size, cluster_size);
     aligned_total_size = _align_offset(virtual_size, CLUSTER_SIZE)
-
-    # /* see qcow2_open() */
-    # refblock_bits = cluster_bits - (refcount_order - 3);
-    # refblock_size = 1 << refblock_bits;
-    refblock_bits = cluster_bits - (REFCOUNT_ORDER - 3)
-    refblock_size = 1 << refblock_bits
 
     # Header: 1 cluster
     # meta_size += cluster_size;
@@ -97,51 +104,13 @@ def _estimate_metadata_size(virtual_size):
     nl1e = _align_offset(int(nl1e), CLUSTER_SIZE // SIZEOF_INT_64)
     meta_size += nl1e * SIZEOF_INT_64
 
-    #  total size of refcount blocks
-    #  note: every host cluster is reference-counted,
-    #  including metadata
-    #  (even refcount blocks are recursively included).
-    #  Let:
-    #    a = total_size (this is the guest disk size)
-    #    m = meta size not including refcount blocks
-    #        and refcount tables
-    #    c = cluster size
-    #    y1 = number of refcount blocks entries
-    #    y2 = meta size including everything
-    #    rces = refcount entry size in byte then,
-    #          y1 = (y2 + a)/c
-    #          y2 = y1 * rces + y1 * rces * sizeof(u64) / c + m
-    #          we can get y1:
-    #          y1 = (a + m) / (c - rces - rces * sizeof(u64) / c)
-    # /* refcount entry size in bytes */
-    # double rces = (1 << refcount_order) / 8.;
-    rces = (1 << REFCOUNT_ORDER) / 8.
+    # total size of refcount table and blocks
+    meta_size += _refcount_metadata_size(
+        (meta_size + aligned_total_size) // CLUSTER_SIZE,
+        CLUSTER_SIZE,
+        REFCOUNT_ORDER)
 
-    # nrefblocke = (aligned_total_size + meta_size + cluster_size)
-    #               / (cluster_size - rces - rces * sizeof(uint64_t)
-    #               / cluster_size);
-    nrefblocke = ((aligned_total_size + meta_size + CLUSTER_SIZE) /
-                  (CLUSTER_SIZE - rces - rces * SIZEOF_INT_64 / CLUSTER_SIZE))
-
-    # meta_size += DIV_ROUND_UP(nrefblocke, refblock_size) * cluster_size;
-    meta_size += _div_round_up(nrefblocke, refblock_size) * CLUSTER_SIZE
-
-    # total size of refcount tables:
-    # nreftablee = nrefblocke / refblock_size;
-    nreftablee = nrefblocke / refblock_size
-
-    # We should always have at least 1 cluster for refcount table.
-    if (nreftablee < 1):
-        nreftablee = 1
-
-    # nreftablee = align_offset(nreftablee, cluster_size / sizeof(uint64_t));
-    nreftablee = _align_offset(int(nreftablee), CLUSTER_SIZE // SIZEOF_INT_64)
-
-    # meta_size += nreftablee * sizeof(uint64_t);
-    meta_size += nreftablee * SIZEOF_INT_64
-
-    # Return the meta data size of the converted image.
-    return int(meta_size)
+    return meta_size
 
 
 def estimate_size(filename):
