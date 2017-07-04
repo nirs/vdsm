@@ -1030,6 +1030,7 @@ class Vm(object):
         Return extension info for a chunked drive or drive replicating to
         chunked replica volume.
         """
+        # TODO: Should we use drive.name here?
         capacity, alloc, physical = self._dom.blockInfo(drive.path, 0)
 
         # Libvirt reports watermarks only for the source drive, but for
@@ -1044,6 +1045,13 @@ class Vm(object):
                                           replica["imageID"],
                                           replica["volumeID"])
             physical = volsize.apparentsize
+
+        # This is very noisy log, logged every 2 seconds for each drive, but
+        # without it we cannot debug issues in blockInfo().
+        self.log.debug(
+            "Extension info for drive %s volume %s (capacity=%s, "
+            "allocated=%s, physical=%s)",
+            drive.name, drive.volumeID, capacity, alloc, physical)
 
         return capacity, alloc, physical
 
