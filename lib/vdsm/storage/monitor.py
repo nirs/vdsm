@@ -20,8 +20,9 @@
 from __future__ import absolute_import
 
 import logging
-import threading
 import time
+
+from six.moves import queue
 
 from vdsm import utils
 from vdsm.common import concurrent
@@ -141,8 +142,6 @@ class DomainMonitor(object):
     def __init__(self, interval):
         self._monitors = {}
         self._interval = interval
-        # NOTE: This must be used in asynchronous mode to prevent blocking of
-        # the checker event loop thread.
         self.onDomainStateChange = misc.Event(
             "storage.DomainMonitor.onDomainStateChange", sync=False)
         self._checker = check.CheckService()
@@ -251,17 +250,21 @@ class DomainMonitor(object):
 
 class MonitorThread(object):
 
+    # Events
+    PATH_CHECKED = "check"
+    MONITOR_STOPPED = "stop"
+
     def __init__(self, sdUUID, hostId, interval, changeEvent, checker):
         self.thread = concurrent.thread(self._run, log=log,
                                         name="monitor/" + sdUUID[:7])
-        self.stopEvent = threading.Event()
         self.domain = None
         self.sdUUID = sdUUID
         self.hostId = hostId
         self.interval = interval
         self.changeEvent = changeEvent
         self.checker = checker
-        self.lock = threading.Lock()
+        # Event queue for communication with other threads.
+        self.events = queue.Queue()
         self.monitoringPath = None
         # For backward compatibility, we must present a fake status before
         # collecting the first sample. The fake status is marked as
@@ -270,10 +273,13 @@ class MonitorThread(object):
                              DomainStatus(actual=False))
         self.isIsoDomain = None
         self.isoPrefix = None
+        # Time of the next monitoring cycle.
+        self.deadline = time.time() + self.interval
         self.lastRefresh = time.time()
         # Use float to allow short refresh internal during tests.
         self.refreshTime = \
             config.getfloat("irs", "repo_stats_cache_refresh_timeout")
+        self.stopped = False
         self.wasShutdown = False
         # Used for synchronizing during the tests
         self.cycleCallback = _NULL_CALLBACK
@@ -282,8 +288,7 @@ class MonitorThread(object):
         self.thread.start()
 
     def stop(self, shutdown=False):
-        self.wasShutdown = shutdown
-        self.stopEvent.set()
+        self.events.put((self.MONITOR_STOPPED, shutdown))
 
     def join(self):
         self.thread.join()
@@ -298,7 +303,7 @@ class MonitorThread(object):
 
     def __canceled__(self):
         """ Accessed by methods decorated with @util.cancelpoint """
-        return self.stopEvent.is_set()
+        return self.stopped
 
     def _run(self):
         log.debug("Domain monitor for %s started", self.sdUUID)
@@ -313,6 +318,41 @@ class MonitorThread(object):
             self._stopCheckingPath()
             if self._shouldReleaseHostId():
                 self._releaseHostId()
+
+    def _handleEvents(self):
+        """
+        Wait until the next cycle, or until we get a check of stop event, and
+        handle received events.
+
+        We expect single PATH_CHECKED event per cycle, and single
+        MONITOR_STOPPED event per liftime of the monitor.
+
+        When this call returns, self.deadline is advanced to the next deadline.
+        If the call is made after the current deadline, we skip missed cycles.
+
+        Note: this method must not raise anything but utils.Canceled.
+        """
+        while True:
+            timeout = max(0, self.deadline - time.time())
+            try:
+                event, data = self.events.get(timeout=timeout)
+            except queue.Empty:
+                # Timeout, time for the next cycle.
+                break
+            if event == self.PATH_CHECKED:
+                try:
+                    self._pathChecked(data)
+                except Exception:
+                    log.exception("Error handling path check event: %s", data)
+            elif event == self.MONITOR_STOPPED:
+                self.stopped = True
+                self.wasShutdown = data
+                raise utils.Canceled
+            else:
+                log.warning("Unknown monitor thread event: %s", event)
+
+        # This is the only place modifying the deadline.
+        self.deadline = time.time() + self.interval
 
     # Setting up
 
@@ -331,8 +371,7 @@ class MonitorThread(object):
                 status = Status(self.status._path_status, domain_status)
                 self._updateStatus(status)
                 self.cycleCallback()
-                if self.stopEvent.wait(self.interval):
-                    raise utils.Canceled
+            self._handleEvents()
 
     def _setupMonitor(self):
         # Pick up changes in the domain, for example, domain upgrade.
@@ -351,8 +390,7 @@ class MonitorThread(object):
         # the next cycle.
         if self.monitoringPath is None:
             self.monitoringPath = self.domain.getMonitoringPath()
-            self.checker.start_checking(self.monitoringPath, self._pathChecked,
-                                        interval=self.interval)
+            self._startCheckingPath()
 
         # The isIsoDomain assignment is deferred because the isoPrefix
         # discovery might fail (if the domain suddenly disappears) and we
@@ -386,8 +424,7 @@ class MonitorThread(object):
                 log.exception("Domain monitor for %s failed", self.sdUUID)
             finally:
                 self.cycleCallback()
-            if self.stopEvent.wait(self.interval):
-                raise utils.Canceled
+            self._handleEvents()
 
     def _monitorDomain(self):
         # Pick up changes in the domain, for example, domain upgrade.
@@ -424,9 +461,8 @@ class MonitorThread(object):
             log.exception("Error checking domain %s", self.sdUUID)
             domain_status.error = e
 
-        with self.lock:
-            status = Status(self.status._path_status, domain_status)
-            self._updateStatus(status)
+        status = Status(self.status._path_status, domain_status)
+        self._updateStatus(status)
 
         if self._shouldAcquireHostId():
             self._acquireHostId()
@@ -452,8 +488,6 @@ class MonitorThread(object):
         log.info("Domain %s became %s", self.sdUUID,
                  "VALID" if status.valid else "INVALID")
         try:
-            # NOTE: We depend on this being asynchrounous, so we don't block
-            # the checker event loop thread.
             self.changeEvent.emit(self.sdUUID, status.valid)
         except:
             log.exception("Error notifying state change for domain %s",
@@ -474,7 +508,8 @@ class MonitorThread(object):
 
     def _pathChecked(self, result):
         """
-        Called from the checker event loop thread. Must not block!
+        Called after a checker completed a check, and submitted a PATH_CHECK
+        event to the event queue.
         """
         try:
             delay = result.delay()
@@ -484,11 +519,29 @@ class MonitorThread(object):
         else:
             path_status = PathStatus(readDelay=delay)
 
-        with self.lock:
-            # NOTE: Everyting under this lock must not block for long time, or
-            # we will block the checker event loop thread.
-            status = Status(path_status, self.status._domain_status)
-            self._updateStatus(status)
+        status = Status(path_status, self.status._domain_status)
+        self._updateStatus(status)
+
+        if self._shouldAcquireHostId():
+            self._acquireHostId()
+
+    def _startCheckingPath(self):
+        """
+        Starts the patch checker for this domain.
+
+        Note that the comlete callback is called from the event loop thread,
+        and we must never block it so other domains monitoring is not delayed.
+
+        The complete callback insert a PATH_CHECKED event to the event queue.
+        This will wake up a sleeping monitor, so check events are handled
+        immidiately.  If the monitor is busy, it will handle the when it
+        becomes idle.
+        """
+        def complete(result):
+            self.events.put((self.PATH_CHECKED, result))
+
+        self.checker.start_checking(self.monitoringPath, complete,
+                                    interval=self.interval)
 
     def _stopCheckingPath(self):
         """

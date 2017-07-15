@@ -52,11 +52,11 @@ class FakeEvent(object):
     """
 
     def __init__(self):
-        self.received = []
+        self.received = queue.Queue()
 
     def emit(self, *args, **kwargs):
         log.debug("Emitting event (args=%s, kwrags=%s)", args, kwargs)
-        self.received.append((args, kwargs))
+        self.received.put((args, kwargs))
 
 
 class FakeCheckService(object):
@@ -262,15 +262,16 @@ class TestMonitorThreadSetup(VdsmTestCase):
             self.assertTrue(status.actual)
             self.assertFalse(status.valid)
             self.assertIsInstance(status.error, se.StorageDomainDoesNotExist)
-            self.assertEqual(env.event.received, [(('uuid', False), {})])
-            del env.event.received[0]
+            event = env.event.received.get(block=False)
+            self.assertEqual(event, (('uuid', False), {}))
 
             # Second cycle will fail but no event should be emitted
             env.wait_for_cycle()
             status = env.thread.getStatus()
             self.assertFalse(status.valid)
             self.assertIsInstance(status.error, se.StorageDomainDoesNotExist)
-            self.assertEqual(env.event.received, [])
+            self.assertTrue(env.event.received.empty(),
+                            "Received unexpected event")
 
             # Third cycle should succeed but no event should be emitted since
             # we don't have path status yet.
@@ -279,13 +280,16 @@ class TestMonitorThreadSetup(VdsmTestCase):
             env.wait_for_cycle()
             status = env.thread.getStatus()
             self.assertTrue(status.valid)
-            self.assertEqual(env.event.received, [])
+            self.assertTrue(env.event.received.empty(),
+                            "Received unexpected event")
 
             # When path status is available, emit event
             env.checker.complete(domain.getMonitoringPath(), FakeCheckResult())
+            # Wait until montior wakes up and process the check event
+            event = env.event.received.get(timeout=MONITOR_INTERVAL / 2)
+            self.assertEqual(event, (('uuid', True), {}))
             status = env.thread.getStatus()
             self.assertTrue(status.valid)
-            self.assertEqual(env.event.received, [(('uuid', True), {})])
 
     @permutations([[OSError], [UnexpectedError]])
     def test_iso_domain_retry(self, exception):
@@ -303,15 +307,16 @@ class TestMonitorThreadSetup(VdsmTestCase):
             self.assertIsNone(status.isoPrefix)
             self.assertFalse(status.valid)
             self.assertIsInstance(status.error, exception)
-            self.assertEqual(env.event.received, [(('uuid', False), {})])
-            del env.event.received[0]
+            event = env.event.received.get(block=False)
+            self.assertEqual(event, (('uuid', False), {}))
 
             # Second cycle will fail but no event should be emitted
             env.wait_for_cycle()
             status = env.thread.getStatus()
             self.assertFalse(status.valid)
             self.assertIsInstance(status.error, exception)
-            self.assertEqual(env.event.received, [])
+            self.assertTrue(env.event.received.empty(),
+                            "Received unexpected event")
 
             # Third cycle should succeed but no event should be emitted since
             # we don't have path status yet.
@@ -320,13 +325,16 @@ class TestMonitorThreadSetup(VdsmTestCase):
             status = env.thread.getStatus()
             self.assertEqual(status.isoPrefix, domain.iso_dir)
             self.assertTrue(status.valid)
-            self.assertEqual(env.event.received, [])
+            self.assertTrue(env.event.received.empty(),
+                            "Received unexpected event")
 
             # When path status is available, emit event
             env.checker.complete(domain.getMonitoringPath(), FakeCheckResult())
+            # Wait until montior wakes up and process the check event
+            event = env.event.received.get(timeout=MONITOR_INTERVAL / 2)
+            self.assertEqual(event, (("uuid", True), {}))
             status = env.thread.getStatus()
             self.assertTrue(status.valid)
-            self.assertEqual(env.event.received, [(('uuid', True), {})])
 
     def test_refresh(self):
         with monitor_env(refresh=MONITOR_INTERVAL * 1.5) as env:
@@ -376,14 +384,17 @@ class TestMonitorThreadMonitoring(VdsmTestCase):
             env.wait_for_cycle()
             status = env.thread.getStatus()
             self.assertFalse(status.actual)
-            self.assertEqual(env.event.received, [])
+            self.assertTrue(env.event.received.empty(),
+                            "Received unexpected event")
 
             # When path succeeds, emit VALID event
             env.checker.complete(domain.getMonitoringPath(), FakeCheckResult())
+            # Wait until montior wakes up and process the check event
+            event = env.event.received.get(timeout=MONITOR_INTERVAL / 2)
+            self.assertEqual(event, (('uuid', True), {}))
             status = env.thread.getStatus()
             self.assertTrue(status.actual)
             self.assertTrue(status.valid)
-            self.assertEqual(env.event.received, [(('uuid', True), {})])
 
     @permutations([
         ("selftest", OSError),
@@ -409,7 +420,8 @@ class TestMonitorThreadMonitoring(VdsmTestCase):
             self.assertTrue(status.actual)
             self.assertFalse(status.valid)
             self.assertIsInstance(status.error, exception)
-            self.assertEqual(env.event.received, [(('uuid', False), {})])
+            event = env.event.received.get(block=False)
+            self.assertEqual(event, (('uuid', False), {}))
 
     @permutations([[se.MiscFileReadException], [UnexpectedError]])
     def test_from_unknown_to_invalid_path(self, exception):
@@ -422,16 +434,19 @@ class TestMonitorThreadMonitoring(VdsmTestCase):
             env.wait_for_cycle()
             status = env.thread.getStatus()
             self.assertFalse(status.actual)
-            self.assertEqual(env.event.received, [])
+            self.assertTrue(env.event.received.empty(),
+                            "Received unexpected event")
 
             # When path fail, emit INVALID event
             env.checker.complete(domain.getMonitoringPath(),
                                  FakeCheckResult(exception))
+            # Wait until montior wakes up and process the check event
+            event = env.event.received.get(timeout=MONITOR_INTERVAL / 2)
+            self.assertEqual(event, (('uuid', False), {}))
             status = env.thread.getStatus()
             self.assertTrue(status.actual)
             self.assertFalse(status.valid)
             self.assertIsInstance(status.error, exception)
-            self.assertEqual(env.event.received, [(('uuid', False), {})])
 
     @permutations([
         ("selftest", OSError),
@@ -453,23 +468,26 @@ class TestMonitorThreadMonitoring(VdsmTestCase):
 
             # First cycle fail, and emit INVALID event
             env.wait_for_cycle()
-            del env.event.received[0]
+            env.event.received.get(block=False)
 
             # Path status succeeds, but domain status is not valid, so no event
             # is emitted.
             env.wait_for_cycle()
             env.checker.complete(domain.getMonitoringPath(), FakeCheckResult())
+            # Wait until montior wakes up and process the check event
+            with self.assertRaises(queue.Empty):
+                env.event.received.get(timeout=MONITOR_INTERVAL / 2)
             status = env.thread.getStatus()
             self.assertTrue(status.actual)
             self.assertFalse(status.valid)
-            self.assertEqual(env.event.received, [])
 
             # When next cycle succeeds, emit VALID event
             del domain.errors[method]
             env.wait_for_cycle()
+            event = env.event.received.get(block=False)
+            self.assertEqual(event, (('uuid', True), {}))
             status = env.thread.getStatus()
             self.assertTrue(status.valid)
-            self.assertEqual(env.event.received, [(('uuid', True), {})])
 
     @permutations([[se.MiscFileReadException], [UnexpectedError]])
     def test_from_invalid_to_valid_path(self, exception):
@@ -482,14 +500,17 @@ class TestMonitorThreadMonitoring(VdsmTestCase):
             env.wait_for_cycle()
             env.checker.complete(domain.getMonitoringPath(),
                                  FakeCheckResult(exception))
-            del env.event.received[0]
+            # Wait until montior wakes up and process the check event
+            env.event.received.get(timeout=MONITOR_INTERVAL / 2)
 
             # Both domain status and pass status succeed, emit VALID event
             env.wait_for_cycle()
             env.checker.complete(domain.getMonitoringPath(), FakeCheckResult())
+            # Wait until montior wakes up and process the check event
+            event = env.event.received.get(timeout=MONITOR_INTERVAL / 2)
+            self.assertEqual(event, (('uuid', True), {}))
             status = env.thread.getStatus()
             self.assertTrue(status.valid)
-            self.assertEqual(env.event.received, [(('uuid', True), {})])
 
     def test_keeps_valid(self):
         with monitor_env() as env:
@@ -500,15 +521,18 @@ class TestMonitorThreadMonitoring(VdsmTestCase):
             # Both domain status and path status succeed and emit VALID event
             env.wait_for_cycle()
             env.checker.complete(domain.getMonitoringPath(), FakeCheckResult())
-            del env.event.received[0]
+            # Wait until montior wakes up and process the check event
+            env.event.received.get(timeout=MONITOR_INTERVAL / 2)
 
             # Both succeed again, no event emitted - domain monitor state did
             # not change (valid -> valid)
             env.wait_for_cycle()
             env.checker.complete(domain.getMonitoringPath(), FakeCheckResult())
+            # Wait until montior wakes up and process the check event
+            with self.assertRaises(queue.Empty):
+                env.event.received.get(timeout=MONITOR_INTERVAL / 2)
             status = env.thread.getStatus()
             self.assertTrue(status.valid)
-            self.assertEqual(env.event.received, [])
 
     @permutations([
         ("selftest", OSError),
@@ -530,15 +554,17 @@ class TestMonitorThreadMonitoring(VdsmTestCase):
             # Both domain status and path status succeed and emit VALID event
             env.wait_for_cycle()
             env.checker.complete(domain.getMonitoringPath(), FakeCheckResult())
-            del env.event.received[0]
+            # Wait until montior wakes up and process the check event
+            env.event.received.get(timeout=MONITOR_INTERVAL / 2)
 
             # Domain status fail, emit INVALID event
             domain.errors[method] = exception
             env.wait_for_cycle()
+            event = env.event.received.get(block=False)
+            self.assertEqual(event, (('uuid', False), {}))
             status = env.thread.getStatus()
             self.assertFalse(status.valid)
             self.assertIsInstance(status.error, exception)
-            self.assertEqual(env.event.received, [(('uuid', False), {})])
 
     @permutations([[se.MiscFileReadException], [UnexpectedError]])
     def test_from_valid_to_invalid_path(self, exception):
@@ -550,15 +576,18 @@ class TestMonitorThreadMonitoring(VdsmTestCase):
             # Both domain status and path status succeed and emit VALID event
             env.wait_for_cycle()
             env.checker.complete(domain.getMonitoringPath(), FakeCheckResult())
-            del env.event.received[0]
+            # Wait until montior wakes up and process the check event
+            env.event.received.get(timeout=MONITOR_INTERVAL / 2)
 
             env.wait_for_cycle()
             env.checker.complete(domain.getMonitoringPath(),
                                  FakeCheckResult(exception))
+            # Wait until montior wakes up and process the check event
+            event = env.event.received.get(timeout=MONITOR_INTERVAL / 2)
+            self.assertEqual(event, (('uuid', False), {}))
             status = env.thread.getStatus()
             self.assertFalse(status.valid)
             self.assertIsInstance(status.error, exception)
-            self.assertEqual(env.event.received, [(('uuid', False), {})])
 
     def test_acquire_host_id(self):
         with monitor_env() as env:
@@ -589,6 +618,8 @@ class TestMonitorThreadMonitoring(VdsmTestCase):
             # Both domain status and path status succeed
             env.wait_for_cycle()
             env.checker.complete(domain.getMonitoringPath(), FakeCheckResult())
+            # Wait until monitor thread wakes up and process the event
+            env.event.received.get(timeout=MONITOR_INTERVAL / 2)
             self.assertFalse(domain.acquired)
 
             # Acquire host id on the next cycle
@@ -604,10 +635,8 @@ class TestMonitorThreadMonitoring(VdsmTestCase):
             # Both domain status and path status succeed
             env.wait_for_cycle()
             env.checker.complete(domain.getMonitoringPath(), FakeCheckResult())
-            self.assertFalse(domain.acquired)
-
-            # Acquire host id on the next cycle
-            env.wait_for_cycle()
+            # Wait until monitor thread wakes up and process the event
+            env.event.received.get(timeout=MONITOR_INTERVAL / 2)
             self.assertTrue(domain.acquired)
 
             # Simulate loosing host id - acquire again because status is valid
@@ -622,6 +651,8 @@ class TestMonitorThreadMonitoring(VdsmTestCase):
             env.thread.start()
             env.wait_for_cycle()
             env.checker.complete(domain.getMonitoringPath(), FakeCheckResult())
+            # Wait until monitor thread wakes up and process the event
+            env.event.received.get(timeout=MONITOR_INTERVAL / 2)
             self.assertFalse(domain.acquired)
 
     def test_dont_acquire_host_id_on_error(self):
@@ -632,6 +663,8 @@ class TestMonitorThreadMonitoring(VdsmTestCase):
             env.thread.start()
             env.wait_for_cycle()
             env.checker.complete(domain.getMonitoringPath(), FakeCheckResult())
+            # Wait until monitor thread wakes up and process the event
+            env.event.received.get(timeout=MONITOR_INTERVAL / 2)
             self.assertFalse(domain.acquired)
 
     @permutations([[se.AcquireHostIdFailure], [UnexpectedError]])
@@ -645,10 +678,8 @@ class TestMonitorThreadMonitoring(VdsmTestCase):
             self.assertFalse(domain.acquired)
             del domain.errors["acquireHostId"]
             env.checker.complete(domain.getMonitoringPath(), FakeCheckResult())
-            self.assertFalse(domain.acquired)
-
-            # Acquire on next cycle
-            env.wait_for_cycle()
+            # Wait until monitor thread wakes up and process the event
+            env.event.received.get(timeout=MONITOR_INTERVAL / 2)
             self.assertTrue(domain.acquired)
 
     def test_refresh(self):
@@ -678,6 +709,8 @@ class TestMonitorThreadStopping(VdsmTestCase):
             env.thread.start()
             env.wait_for_cycle()
             env.checker.complete(domain.getMonitoringPath(), FakeCheckResult())
+            # Wait until monitor thread wakes up and process the event
+            env.event.received.get(timeout=MONITOR_INTERVAL / 2)
         self.assertFalse(domain.acquired)
 
     def test_shutdown(self):
@@ -687,6 +720,8 @@ class TestMonitorThreadStopping(VdsmTestCase):
             env.thread.start()
             env.wait_for_cycle()
             env.checker.complete(domain.getMonitoringPath(), FakeCheckResult())
+            # Wait until monitor thread wakes up and process the event
+            env.event.received.get(timeout=MONITOR_INTERVAL / 2)
             # Acquire on next cycle
             env.wait_for_cycle()
         self.assertTrue(domain.acquired)
@@ -704,7 +739,7 @@ class TestMonitorThreadStopping(VdsmTestCase):
             monitor.sdCache.domains["uuid"] = domain
             env.thread.start()
             if not blocked.wait(CYCLE_TIMEOUT):
-                raise RuntimeError("Timeout waiting for calling getReadDelay")
+                raise RuntimeError("Timeout waiting for calling selftest()")
 
         status = env.thread.getStatus()
         self.assertFalse(status.actual)
