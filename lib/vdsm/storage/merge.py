@@ -38,14 +38,14 @@ import logging
 
 from vdsm import constants
 from vdsm import properties
-from vdsm import qemuimg
 from vdsm import utils
-
 from vdsm.config import config
+
 from vdsm.storage import constants as sc
 from vdsm.storage import exception as se
 from vdsm.storage import guarded
 from vdsm.storage import image
+from vdsm.storage import qemuimg
 from vdsm.storage import resourceManager as rm
 from vdsm.storage import volume
 from vdsm.storage.sdc import sdCache

@@ -55,7 +55,6 @@ dist_vdsmpylib_PYTHON = \
 	ppc64HardwareInfo.py \
 	properties.py \
 	protocoldetector.py \
-	qemuimg.py \
 	schedule.py \
 	sslutils.py \
 	supervdsm.py \
