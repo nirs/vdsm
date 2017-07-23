@@ -66,6 +66,9 @@ import errno
 import heapq
 import logging
 import os
+import select
+
+import six
 
 from vdsm.common import filecontrol
 from vdsm.common import osutils
@@ -156,16 +159,7 @@ class EventLoop(object):
             when = self._scheduled[0]._when
             timeout = max(0, when - self.time())
 
-        # Note: unlike Python 3 version, this run I/O event handlers now. This
-        # means that handlers scheduled from I/O event handlers will run in
-        # this cycle instead of the next cycle in Python 3.
-        try:
-            asyncore.poll2(timeout, self._channels)
-        except Exception:
-            # asyncore.poll2 delegate error handling to dispatcher's
-            # handle_error(), but it does *not* handle the case when
-            # handle_error() raises.
-            log.exception("Unhandled error in I/O handler")
+        self._poll_channels(timeout)
 
         # Handle 'later' callbacks that are ready.
         now = self.time()
@@ -190,6 +184,56 @@ class EventLoop(object):
             handle._run()
 
         handle = None  # Needed to break cycles when an exception occurs.
+
+    def _poll_channels(self, timeout=None):
+        """
+        Wait for events on readable or writable channels.
+
+        To integrate properly in the event loop, we must run the I/O events at
+        the end of _run_once, and handle exceptions for each event callback. So
+        we must remimplement here asyncore.poll2().
+
+        Changes compared with the original implemention from python 3.7:
+        - socket_map is always non empty, since we have the Waker channel.
+        - When poll ends, add a callback for each object, to run later when the
+          event loop cycle ends.
+        - When running the callback, skip closed sockets.
+
+        Reimplementing the poll loop, we can fix couple of bugs in the original
+        implementation. These bugs may never be fixed in 2.7 or even in 3.x,
+        since asyncore was deprecated since version 3.6.
+        - http://bugs.python.org/issue30994
+        - http://bugs.python.org/issue30985
+        - http://bugs.python.org/issue30931
+        """
+        map = self._channels
+        pollster = select.poll()
+
+        for fd, obj in six.iteritems(map):
+            flags = 0
+            if obj.readable():
+                flags |= select.POLLIN | select.POLLPRI
+            # accepting sockets should not be writable
+            if obj.writable() and not obj.accepting:
+                flags |= select.POLLOUT
+            if flags:
+                pollster.register(fd, flags)
+
+        if timeout is not None:
+            timeout = int(timeout * 1000)
+
+        # The try block is needed only for python 2. In python 3 the call is
+        # restarted after EINTR.
+        try:
+            events = pollster.poll(timeout)
+        except select.error as e:
+            if e[0] != errno.EINTR:
+                raise
+            return
+
+        for fd, flags in events:
+            handle = Dispatcher(map[fd], flags)
+            self._ready.append(handle)
 
     def stop(self):
         """
@@ -409,6 +453,20 @@ class Handle(object):
 
     def __repr__(self):
         return "<%s at 0x%x>" % (" ".join(self._repr_info()), id(self))
+
+
+class Dispatcher(Handle):
+    """
+    A handle calling asyncore.readwrite on a ready dispatcher, skipping closed
+    dispatcher.
+    """
+
+    def __init__(self, obj, flags):
+        super(Dispatcher, self).__init__(asyncore.readwrite, (obj, flags))
+
+    @property
+    def _cancelled(self):
+        return self._args is None or self._args[0].closing
 
 
 class Timer(Handle):
