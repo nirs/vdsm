@@ -80,7 +80,7 @@ class TestEvent(VdsmTestCase):
         event.register(callback)
         del callback
         event.emit()
-        ev.wait(5)
+        ev.wait(0.5)
         self.assertFalse(ev.isSet())
 
     def testUnregister(self):
@@ -90,7 +90,7 @@ class TestEvent(VdsmTestCase):
         event.register(callback)
         event.unregister(callback)
         event.emit()
-        ev.wait(5)
+        ev.wait(0.5)
         self.assertFalse(ev.isSet())
 
     def testOneShot(self):
@@ -103,11 +103,11 @@ class TestEvent(VdsmTestCase):
         event = misc.Event("EndOfTheWorld")
         event.register(callback, oneshot=True)
         event.emit()
-        ev.wait(5)
+        ev.wait(0.5)
         self.assertTrue(ev.isSet())
         ev.clear()
         event.emit()
-        ev.wait(5)
+        ev.wait(0.5)
         self.assertFalse(ev.isSet())
 
     def testEmitCallbackException(self):
@@ -132,7 +132,7 @@ class TestEvent(VdsmTestCase):
         receiver = Receiver(event, ev)
         print(event._registrar)
         event.emit()
-        ev.wait(5)
+        ev.wait(0.5)
         self.assertTrue(ev.isSet())
         receiver  # Makes pyflakes happy
 
