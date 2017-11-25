@@ -87,15 +87,17 @@ class StompTests(TestCaseBase):
 
         with constructAcceptor(self.log, use_ssl, _SampleBridge()) as acceptor:
             sslctx = DEAFAULT_SSL_CONTEXT if use_ssl else None
-
-            with utils.running(StandAloneRpcClient(acceptor._host,
-                                                   acceptor._port,
-                                                   'jms.topic.vdsm_requests',
-                                                   str(uuid4()),
-                                                   sslctx)) as client:
-                self.assertEqual(client.callMethod('echo', (data,),
-                                                   str(uuid4())),
-                                 data)
+            client = StandAloneRpcClient(
+                acceptor._host,
+                acceptor._port,
+                'jms.topic.vdsm_requests',
+                str(uuid4()),
+                sslctx,
+                nr_retries=0,
+                reconnect_interval=1)
+            with utils.running(client):
+                res = client.callMethod('echo', (data,), str(uuid4()))
+                self.assertEqual(res, data)
 
     @xfail('Broken by commit 28293216c20533b0250c0bd0246d7d4463a9d14c')
     @permutations(_USE_SSL)
