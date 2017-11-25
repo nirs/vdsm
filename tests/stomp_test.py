@@ -31,7 +31,7 @@ from yajsonrpc.stompreactor import StandAloneRpcClient
 from vdsm import utils
 
 from testValidation import broken_on_ci
-from testValidation import brokentest
+from testValidation import xfail
 
 from integration.sslhelper import DEAFAULT_SSL_CONTEXT
 
@@ -97,7 +97,7 @@ class StompTests(TestCaseBase):
                                                    str(uuid4())),
                                  data)
 
-    @brokentest('This test randomly fails on CI with JsonRpcNoResponseError')
+    @xfail('Broken by commit 28293216c20533b0250c0bd0246d7d4463a9d14c')
     @permutations(_USE_SSL)
     def test_event(self, use_ssl):
         done = threading.Event()
@@ -114,6 +114,9 @@ class StompTests(TestCaseBase):
                 self.assertEqual(params['content'], True)
                 done.set()
 
+            # registerEventCallback was removed in commit
+            # 28293216c20533b0250c0bd0246d7d4463a9d14c - not sure why and what
+            # is the replacement.
             client.registerEventCallback(callback)
             client.callMethod("event", [], str(uuid4()))
             done.wait(timeout=CALL_TIMEOUT)
