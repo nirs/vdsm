@@ -30,7 +30,7 @@ from integration.jsonRpcHelper import constructAcceptor
 from yajsonrpc.stompreactor import StandAloneRpcClient
 from vdsm import utils
 
-from testValidation import brokentest
+from testValidation import brokentest, slowtest
 
 from integration.sslhelper import DEAFAULT_SSL_CONTEXT
 
@@ -71,6 +71,7 @@ class _SampleBridge(object):
 @expandPermutations
 class StompTests(TestCaseBase):
 
+    @slowtest
     @brokentest('This test randomly fails on CI with JsonRpcNoResponseError')
     @permutations([
         # size, use_ssl
