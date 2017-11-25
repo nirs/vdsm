@@ -237,27 +237,26 @@ class MultipathListener(object):
         mpath_uuid = device.get("DM_UUID", "")
         if not mpath_uuid.startswith("mpath-"):
             return None
+
         mpath_uuid = mpath_uuid[6:]
 
         if device.action == "change":
-            dm_action = device.get("DM_ACTION")
-            if dm_action == "PATH_FAILED":
-                event_type = PATH_FAILED
-            elif dm_action == "PATH_REINSTATED":
-                event_type = PATH_REINSTATED
-            else:
-                self.log.debug("Unsupported DM_ACTION %r", dm_action)
-                return
             valid_paths = int(device.get("DM_NR_VALID_PATHS"))
             path = self._block_device_name(device.get("DM_PATH"))
+            dm_action = device.get("DM_ACTION")
+            if dm_action == "PATH_FAILED":
+                return MultipathEvent(
+                    PATH_FAILED, mpath_uuid, path, valid_paths)
+            elif dm_action == "PATH_REINSTATED":
+                return MultipathEvent(
+                    PATH_REINSTATED, mpath_uuid, path, valid_paths)
+            else:
+                self.log.debug("Unsupported DM_ACTION %r", dm_action)
+                return None
         elif device.action == "remove":
-            event_type = MPATH_REMOVED
-            valid_paths = None
-            path = None
+            return MultipathEvent(MPATH_REMOVED, mpath_uuid, None, None)
         else:
             return None
-
-        return MultipathEvent(event_type, mpath_uuid, path, valid_paths)
 
     def _forward_event(self, event):
         with self._lock:
