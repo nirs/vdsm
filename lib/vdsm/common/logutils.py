@@ -19,6 +19,7 @@
 #
 from __future__ import absolute_import
 
+import collections
 import datetime
 import functools
 import grp
@@ -26,10 +27,14 @@ import logging
 import logging.handlers
 import os
 import pwd
+import threading
+
 from dateutil import tz
 from inspect import ismethod
 
 import six
+
+from . import concurrent
 
 
 def funcName(func):
@@ -138,6 +143,91 @@ class TimezoneFormatter(logging.Formatter):
                 ct.strftime('%z')
             )
         return s
+
+
+class ThreadedHandler(logging.Handler):
+    """
+    A handler queuing records and logging them in a background thread using
+    UserGroupEnforcingHandler.
+    """
+
+    _CLOSED = object()
+
+    def __init__(self, user, group, filename, queue_size=10000):
+        """
+        Arguments:
+            user (str): logfile user name.
+            group (str): logfile group name.
+            filename (str): log filename
+            queue_size (int): number of records to queue before dropping
+                records. When the queue becomes full, oldest records are
+                dropped.  Using default value to keep __init__ signature same
+                as UserGroupEnforcingHandler, so configuring this handler
+                requires only a class name change.
+        """
+        logging.Handler.__init__(self)
+        self._handler = UserGroupEnforcingHandler(user, group, filename)
+        self._queue = collections.deque(maxlen=queue_size)
+        self._cond = threading.Condition(threading.Lock())
+        self._thread = concurrent.thread(self._run, name="logfile")
+        self._thread.start()
+
+    # Handler interface
+
+    def createLock(self):
+        """
+        Override to avoid unneeded lock. We use a condition to synchronize with
+        the logging thread.
+        """
+        self.lock = None
+
+    def handle(self, record):
+        """
+        Handle a log record.
+
+        If the queue is full, oldest record is dropped to make room for the new
+        record.
+        """
+        with self._cond:
+            self._queue.append(record)
+            self._cond.notify()
+
+    def setFormatter(self, fmt):
+        """
+        Override to pass the formatter to the underlying handler.
+        """
+        self._handler.setFormatter(fmt)
+
+    def close(self):
+        """
+        Extend Handler.close to stop the thread during shutdown.
+        """
+        logging.Handler.close(self)
+        with self._cond:
+            self._queue.append(self._CLOSED)
+            self._cond.notify()
+        self._thread.join()
+
+    # Private
+
+    def _run(self):
+        while True:
+            # Wait for messages.
+            with self._cond:
+                while len(self._queue) == 0:
+                    self._cond.wait()
+
+            # Handle all pending messages before taking the lock again.
+            pending = len(self._queue)
+            for _ in range(pending):
+                record = self._queue.popleft()
+                if record is self._CLOSED:
+                    return
+                self._handler.handle(record)
+
+            # Avoid reference cycles, specially exc_info that may hold a
+            # traceback objects.
+            record = None
 
 
 class Suppressed(object):

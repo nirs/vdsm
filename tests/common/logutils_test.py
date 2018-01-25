@@ -18,11 +18,19 @@
 # Refer to the README and COPYING files for full details of the license
 #
 
+import grp
 import logging
+import os
+import pwd
+
+from contextlib import closing
+from contextlib import contextmanager
 
 from testlib import VdsmTestCase as TestCaseBase
 from testlib import forked
+from testlib import namedTemporaryDir
 
+from vdsm.common import concurrent
 from vdsm.common import logutils
 
 
@@ -82,3 +90,100 @@ class TestSetLevel(TestCaseBase):
         # The old name should work as well.
         logutils.set_level("ERROR")
         self.assertEqual(logger.getEffectiveLevel(), logging.ERROR)
+
+
+@contextmanager
+def threaded_handler(filename, queue_size):
+    user = pwd.getpwuid(os.geteuid()).pw_name
+    group = grp.getgrgid(os.getegid()).gr_name
+    handler = logutils.ThreadedHandler(
+        user, group, filename, queue_size=queue_size)
+    with closing(handler):
+        logger = logging.Logger("test")
+        logger.addHandler(handler)
+        yield handler, logger
+
+
+class TestThreadedHandler(TestCaseBase):
+
+    def test_queue_size(self):
+        with namedTemporaryDir() as tmpdir:
+            filename = os.path.join(tmpdir, "test.log")
+            # Note: stopping the handler submits a sentinel record. If the
+            # queue is full, this will drop the oldest record. Use 101 to
+            # ensure that we log 100 messages.
+            with threaded_handler(filename, 101) as (handler, logger):
+                for _ in range(100):
+                    logger.info("It works!")
+            with open(filename) as f:
+                lines = f.readlines()
+
+        self.assertEqual(lines, ["It works!\n"] * 100)
+
+    def test_drop_old_messages(self):
+        with namedTemporaryDir() as tmpdir:
+            filename = os.path.join(tmpdir, "test.log")
+            with threaded_handler(filename, 10) as (handler, logger):
+                for i in range(100):
+                    logger.info("Message %d", i)
+            with open(filename) as f:
+                lines = f.readlines()
+
+        # Recent message should be kept, older messages may have dropped.
+        recent_messages = ["Message %d\n" % i for i in range(91, 100)]
+        self.assertEqual(lines[-9:], recent_messages)
+
+    def test_level_debug(self):
+        with namedTemporaryDir() as tmpdir:
+            filename = os.path.join(tmpdir, "test.log")
+            with threaded_handler(filename, 10) as (handler, logger):
+                handler.setLevel(logging.DEBUG)
+                logger.debug("Should be logged")
+            with open(filename) as f:
+                lines = f.readlines()
+
+        self.assertEqual("Should be logged\n", lines[0])
+
+    def test_level_info(self):
+        with namedTemporaryDir() as tmpdir:
+            filename = os.path.join(tmpdir, "test.log")
+            with threaded_handler(filename, 10) as (handler, logger):
+                handler.setLevel(logging.INFO)
+                logger.debug("Should not be logged")
+            with open(filename) as f:
+                lines = f.readlines()
+
+        self.assertEqual(lines, [])
+
+    def test_multiple_threads(self):
+        with namedTemporaryDir() as tmpdir:
+            filename = os.path.join(tmpdir, "test.log")
+            with threaded_handler(filename, 101) as (handler, logger):
+
+                def worker(n):
+                    for i in range(10):
+                        logger.info("Message %02d:%02d", n, i)
+
+                threads = []
+                for i in range(10):
+                    t = concurrent.thread(worker, args=(i,))
+                    t.start()
+                    threads.append(t)
+
+                for t in threads:
+                    t.join()
+
+            with open(filename) as f:
+                lines = f.readlines()
+
+        self.assertEqual(len(lines), 100)
+
+    def test_set_formatter(self):
+        with namedTemporaryDir() as tmpdir:
+            filename = os.path.join(tmpdir, "test.log")
+            with threaded_handler(filename, 10) as (handler, logger):
+                formatter = logging.Formatter("--%(message)s--")
+                handler.setFormatter(formatter)
+                logger.info("message")
+            with open(filename) as f:
+                self.assertEqual(f.read(), "--message--\n")
