@@ -61,7 +61,7 @@ formatter=sysform
 args=('/dev/log', handlers.SysLogHandler.LOG_USER)
 
 [handler_logfile]
-class=vdsm.common.logutils.UserGroupEnforcingHandler
+class=vdsm.common.logutils.ThreadedHandler
 args=('@VDSMUSER@', '@VDSMGROUP@', '@VDSMLOGDIR@/vdsm.log',)
 level=DEBUG
 formatter=long
