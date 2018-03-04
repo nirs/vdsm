@@ -417,11 +417,11 @@ parameters = [
             'Note that blkdiscard is more efficient than dd, in particular '
             'when the underlying storage supports "write same".'),
 
-        ('zero_block_size_mb', '1',
+        ('zero_block_size_mb', '8',
             'The block size used when zeroing a device using the "dd" '
             'zero_method. This does not effect the "blkdiscard" '
             'zero_method using 2 MiB block size. A legal value is an '
-            'integer between 1 and 64 (default 1).'),
+            'integer between 1 and 64 (default 8).'),
     ]),
 
     # Section: [jobs]
