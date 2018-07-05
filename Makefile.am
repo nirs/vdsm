@@ -171,7 +171,12 @@ check-unit:
 
 .PHONY: tests
 tests:
-	tox -e tests,storage-py27,storage-py36,lib-py27,lib-py36,network-py27,network-py36,virt-py27,virt-py36
+	if [ "$(PYTHON3_SUPPORT)" == "1" ]; then \
+		tox -e tests,storage-py27,storage-py36,lib-py27,lib-py36,network-py27,network-py36,virt-py27,virt-py36; \
+	else \
+	    echo "Warning: skipping python3 tests"; \
+		tox -e tests,storage-py27,lib-py27,network-py27,virt-py27; \
+	fi
 
 all-local: \
 	vdsm.spec
