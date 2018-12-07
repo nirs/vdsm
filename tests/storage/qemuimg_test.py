@@ -33,7 +33,6 @@ from monkeypatch import MonkeyPatch, MonkeyPatchScope
 
 from . import qemuio
 
-from testlib import permutations, expandPermutations
 from testlib import make_config
 from testlib import namedTemporaryDir
 from vdsm.common import cmdutils
@@ -60,14 +59,16 @@ def fake_json_call(data, cmd, **kw):
     return 0, json.dumps(data).encode("utf-8"), []
 
 
-@expandPermutations
 class GeneralTests:
-    @permutations((("0.10", True), ("1.1", True), ("10.1", False)))
+    @pytest.mark.parametrize("compat,result", [
+        ("0.10", True),
+        ("1.1", True),
+        ("10.1", False),
+    ])
     def test_supports_compat(self, compat, result):
         assert result == qemuimg.supports_compat(compat)
 
 
-@expandPermutations
 class InfoTests:
     CLUSTER_SIZE = 65536
 
@@ -114,11 +115,7 @@ class InfoTests:
             assert base_path == info['backingfile']
             assert '0.10' == info['compat']
 
-    @permutations([
-        # unsafe
-        (True,),
-        (False,),
-    ])
+    @pytest.mark.parametrize("unsafe", [True, False])
     def test_unsafe_info(self, unsafe):
         with namedTemporaryDir() as tmpdir:
             img = os.path.join(tmpdir, 'img.img')
@@ -137,7 +134,7 @@ class InfoTests:
             with pytest.raises(cmdutils.Error):
                 qemuimg.info('leaf.img')
 
-    @permutations((('format',), ('virtual-size',)))
+    @pytest.mark.parametrize("field", ['format', 'virtual-size'])
     def test_missing_required_field_raises(self, field):
         data = self._fake_info()
         del data[field]
@@ -154,10 +151,10 @@ class InfoTests:
             with pytest.raises(cmdutils.Error):
                 qemuimg.info('leaf.img')
 
-    @permutations((
+    @pytest.mark.parametrize("qemu_field,info_field", [
         ('backing-filename', 'backingfile'),
         ('cluster-size', 'clustersize'),
-    ))
+    ])
     def test_optional_fields(self, qemu_field, info_field):
         data = self._fake_info()
         del data[qemu_field]
@@ -204,13 +201,12 @@ class InfoTests:
                                '--as=1073741824']
 
 
-@expandPermutations
 class CreateTests:
-    @permutations((
+    @pytest.mark.parametrize("image_format,allocation_mode,allocated_bytes", [
         (qemuimg.FORMAT.RAW, qemuimg.PREALLOCATION.OFF, 0),
         (qemuimg.FORMAT.RAW, qemuimg.PREALLOCATION.FALLOC, 16 * 1024 * 1024),
-        (qemuimg.FORMAT.RAW, qemuimg.PREALLOCATION.FULL, 16 * 1024 * 1024)
-    ))
+        (qemuimg.FORMAT.RAW, qemuimg.PREALLOCATION.FULL, 16 * 1024 * 1024),
+    ])
     def test_allocate(self, image_format, allocation_mode, allocated_bytes):
         size = 16 * 1024 * 1024
         with temporaryPath() as image:
@@ -428,8 +424,10 @@ class TestConvertUnorderedWrites:
     test only convert to raw.
     """
 
-    @pytest.mark.parametrize(
-        "format", [qemuimg.FORMAT.RAW, qemuimg.FORMAT.QCOW2])
+    @pytest.mark.parametrize("format", [
+        qemuimg.FORMAT.RAW,
+        qemuimg.FORMAT.QCOW2
+    ])
     def test_single(self, tmpdir, format):
         src = str(tmpdir.join("src"))
         dst = str(tmpdir.join("dst"))
@@ -484,11 +482,9 @@ class TestConvertUnorderedWrites:
         qemuio.verify_pattern(dst, qemuimg.FORMAT.RAW, offset=top_offset)
 
 
-@expandPermutations
 class TestConvertPreallocation:
 
-    @permutations([
-        # preallocation, virtual_size, actual_size
+    @pytest.mark.parametrize("preallocation,virtual_size,actual_size", [
         (None, 10 * 1024**2, 0),
         (qemuimg.PREALLOCATION.OFF, 10 * 1024**2, 0),
         (qemuimg.PREALLOCATION.FALLOC, 10 * 1024**2, 10 * 1024**2),
@@ -510,8 +506,7 @@ class TestConvertPreallocation:
             assert stat.st_size == virtual_size
             assert stat.st_blocks * 512 == actual_size
 
-    @permutations([
-        # preallocation, virtual_size, actual_size
+    @pytest.mark.parametrize("preallocation,virtual_size,actual_size", [
         (None, 10 * 1024**2, 0),
         (qemuimg.PREALLOCATION.OFF, 10 * 1024**2, 0),
         (qemuimg.PREALLOCATION.FALLOC, 10 * 1024**2, 10 * 1024**2),
@@ -626,25 +621,22 @@ class TestProgressCommand:
         assert p.progress == 42.0
 
 
-@expandPermutations
 class TestCommit:
 
-    @permutations([
-        # qcow2_compat, base, top, use_base
+    @pytest.mark.parametrize("qcow2_compat", ["0.10", "1.1"])
+    @pytest.mark.parametrize("base,top,use_base", [
         # Merging internal volume into its parent volume in raw format
-        ("1.1", 0, 1, False),
-        ("1.1", 0, 1, True),
-        ("0.10", 0, 1, False),
-        ("0.10", 0, 1, True),
+        (0, 1, False),
+        (0, 1, True),
         # Merging internal volume into its parent volume in cow format
-        ("1.1", 1, 2, True),
-        ("0.10", 1, 2, True),
+        (1, 2, True),
+        (1, 2, True),
         # Merging a subchain
-        ("1.1", 1, 3, True),
-        ("0.10", 1, 3, True),
+        (1, 3, True),
+        (1, 3, True),
         # Merging the entire chain into the base
-        ("1.1", 0, 3, True),
-        ("0.10", 0, 3, True)
+        (0, 3, True),
+        (0, 3, True),
     ])
     def test_commit(self, qcow2_compat, base, top, use_base):
         size = 1048576
@@ -704,7 +696,6 @@ class TestCommit:
             assert 100 == op.progress
 
 
-@expandPermutations
 class TestMap:
 
     # We test only qcow2 images since this is the only use case that we need
@@ -714,7 +705,7 @@ class TestMap:
     # travis-ci), empty image will be seen as one block with data=True.
     FORMAT = qemuimg.FORMAT.QCOW2
 
-    @permutations([["0.10"], ["1.1"]])
+    @pytest.mark.parametrize("qcow2_compat", ["0.10", "1.1"])
     def test_empty_image(self, qcow2_compat):
         with namedTemporaryDir() as tmpdir:
             size = 1048576
@@ -735,12 +726,10 @@ class TestMap:
 
             self.check_map(qemuimg.map(image), expected)
 
-    @permutations([
-        # offset, length, expected_length, expected_start, qcow2_compat
-        (64 * 1024, 4 * 1024, 65536, "0.10"),
-        (64 * 1024, 4 * 1024, 65536, "1.1"),
-        (64 * 1024, 72 * 1024, 131072, "0.10"),
-        (64 * 1024, 72 * 1024, 131072, "1.1"),
+    @pytest.mark.parametrize("qcow2_compat", ["0.10", "1.1"])
+    @pytest.mark.parametrize("offset,length,expected_length", [
+        (64 * 1024, 4 * 1024, 65536),
+        (64 * 1024, 72 * 1024, 131072),
     ])
     def test_one_block(self, offset, length, expected_length, qcow2_compat):
         with namedTemporaryDir() as tmpdir:
@@ -796,17 +785,15 @@ class TestMap:
                     raise MapMismatch(msg, expected, actual)
 
 
-@expandPermutations
 class TestAmend:
 
-    @permutations([
-        # qcow2_compat, desired_qcow2_compat
+    @pytest.mark.parametrize("qcow2_compat,desired_compat", [
         ("0.10", "1.1"),
         ("0.10", "0.10"),
         ("1.1", "1.1"),
     ])
-    @MonkeyPatch(qemuimg, 'config', CONFIG)
-    def test_empty_image(self, qcow2_compat, desired_qcow2_compat):
+    def test_empty_image(self, monkeypatch, qcow2_compat, desired_compat):
+        monkeypatch.setattr(qemuimg, 'config', CONFIG)
         with namedTemporaryDir() as tmpdir:
             base_path = os.path.join(tmpdir, 'base.img')
             leaf_path = os.path.join(tmpdir, 'leaf.img')
@@ -817,8 +804,8 @@ class TestAmend:
             op_leaf = qemuimg.create(leaf_path, format=qemuimg.FORMAT.QCOW2,
                                      backing=base_path)
             op_leaf.run()
-            qemuimg.amend(leaf_path, desired_qcow2_compat)
-            assert qemuimg.info(leaf_path)['compat'] == desired_qcow2_compat
+            qemuimg.amend(leaf_path, desired_compat)
+            assert qemuimg.info(leaf_path)['compat'] == desired_compat
 
 
 class TestMeasure:
