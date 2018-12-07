@@ -33,7 +33,6 @@ from monkeypatch import MonkeyPatch, MonkeyPatchScope
 
 from . import qemuio
 
-from testlib import VdsmTestCase as TestCaseBase
 from testlib import permutations, expandPermutations
 from testlib import make_config
 from testlib import namedTemporaryDir
@@ -62,14 +61,14 @@ def fake_json_call(data, cmd, **kw):
 
 
 @expandPermutations
-class GeneralTests(TestCaseBase):
+class GeneralTests:
     @permutations((("0.10", True), ("1.1", True), ("10.1", False)))
     def test_supports_compat(self, compat, result):
         assert result == qemuimg.supports_compat(compat)
 
 
 @expandPermutations
-class InfoTests(TestCaseBase):
+class InfoTests:
     CLUSTER_SIZE = 65536
 
     def _fake_info(self):
@@ -206,7 +205,7 @@ class InfoTests(TestCaseBase):
 
 
 @expandPermutations
-class CreateTests(TestCaseBase):
+class CreateTests:
     @permutations((
         (qemuimg.FORMAT.RAW, qemuimg.PREALLOCATION.OFF, 0),
         (qemuimg.FORMAT.RAW, qemuimg.PREALLOCATION.FALLOC, 16 * 1024 * 1024),
@@ -289,7 +288,7 @@ class CreateTests(TestCaseBase):
                            backing='no-such-file', unsafe=True)
 
 
-class ConvertTests(TestCaseBase):
+class ConvertTests:
 
     def test_no_format(self):
         def convert(cmd, **kw):
@@ -486,7 +485,7 @@ class TestConvertUnorderedWrites:
 
 
 @expandPermutations
-class TestConvertPreallocation(TestCaseBase):
+class TestConvertPreallocation:
 
     @permutations([
         # preallocation, virtual_size, actual_size
@@ -542,7 +541,7 @@ class TestConvertPreallocation(TestCaseBase):
                 preallocation=qemuimg.PREALLOCATION.METADATA)
 
 
-class CheckTests(TestCaseBase):
+class CheckTests:
 
     @MonkeyPatch(qemuimg, 'config', CONFIG)
     def test_check(self):
@@ -572,7 +571,7 @@ class CheckTests(TestCaseBase):
                 qemuimg.check('unused')
 
 
-class TestProgressCommand(TestCaseBase):
+class TestProgressCommand:
 
     def test_failure(self):
         p = qemuimg.ProgressCommand(['false'])
@@ -628,7 +627,7 @@ class TestProgressCommand(TestCaseBase):
 
 
 @expandPermutations
-class TestCommit(TestCaseBase):
+class TestCommit:
 
     @permutations([
         # qcow2_compat, base, top, use_base
@@ -706,7 +705,7 @@ class TestCommit(TestCaseBase):
 
 
 @expandPermutations
-class TestMap(TestCaseBase):
+class TestMap:
 
     # We test only qcow2 images since this is the only use case that we need
     # now.  Testing raw images is tricky, the result depends on the file system
@@ -798,7 +797,7 @@ class TestMap(TestCaseBase):
 
 
 @expandPermutations
-class TestAmend(TestCaseBase):
+class TestAmend:
 
     @permutations([
         # qcow2_compat, desired_qcow2_compat
