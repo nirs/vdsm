@@ -23,15 +23,14 @@ from __future__ import division
 
 import logging
 import os
-import sqlite3
 from contextlib import closing
 
 from vdsm import constants
 from vdsm.common import errors
-from vdsm.storage import managedvolumedb as db
+from vdsm.storage import fileUtils
+from vdsm.storage import managedvolumedb as mvdb
 
-from . import YES, MAYBE
-
+from . import YES, NO
 
 log = logging.getLogger("tool.configurators.managevolumedb")
 
@@ -45,64 +44,46 @@ def configure():
     """
     Create database for managed volumes
     """
-    res = _check_db_version()
-    if res == 0:
-        return
-    elif res == 1:
-        db.create_db()
-        os.chown(db.DB_FILE, constants.VDSM_USER, constants.VDSM_GROUP)
+    if not db_exists():
+        sys.stdout.write("Creating managed volume database\n")
+        mvdb.create_db()
+        set_db_ownership()
     else:
-        raise DatabaseError
+        if not db_owned_by_vdsm():
+            sys.stdout.write("Fixing managed volume database ownership\n")
+            set_db_ownership()
+
+        if not db_version_ok():
+            raise DatabaseError("Unexpeced database version")
 
 
 def isconfigured():
     """
-    Return YES if managedvolumedb is configured, otherwise MAYBE as we don't
-    want to crash vdsm install if creation of db fails.
+    Return YES if managedvolumedb is configured, otherwise NO.
     """
-    if _check_db_version() == 0:
+    if db_exists() and db_owned_by_vdsm() and db_version_ok():
+        sys.stdout.write("Managed volume database configured\n")
         return YES
     else:
-        return MAYBE
+        sys.stdout.write("Managed volume database needs configuration\n")
+        return NO
 
 
-def _check_db_version():
+def db_exists():
+    return os.path.isfile(mvdb.DB_FILE)
 
-    # DB file doesn't exists
-    if not os.path.isfile(db.DB_FILE):
-        log.info("DB file %s doesn't exists", db.DB_FILE)
-        return 1
 
-    # check DB file ownership
-    if os.stat(db.create_db()).st_uid != constants.VDSM_USER or os.stat(
-            db.create_db()).st_gid != constants.VDSM_GROUP:
-        log.warn("DB file %s hasn't proper ownership %s:%s", db.DB_FILE,
-                 constants.VDSM_USER, constants.VDSM_GROUP)
-        return 2
+def db_owned_by_vdsm():
+    st = os.stat(mvdb.DB_FILE)
+    return (st.st_uid == fileUtils.resolveUid(constants.VDSM_USER) and
+            st.st_gid == fileUtils.resolveGid(constants.VDSM_GROUP))
 
-    # check it has correct tables
-    conn = sqlite3.connect(db.DB_FILE)
-    with closing(conn):
-        conn.row_factory = sqlite3.Row
-        res = conn.execute("SELECT name FROM sqlite_master")
-        tables = res.fetchone()
-        if "volumes" not in tables:
-            log.info("Table 'volumes' not found in DB tables")
-            return 1
-        if "versions" not in tables:
-            log.info("Table 'versions' not found in DB tables")
-            return 1
 
-    try:
-        # check version is expected one
-        version = db.version_info()
-        log.debug("Database version=%s", version["version"])
-        if db.VERSION == version["version"]:
-            return 0
-        else:
-            log.warn("Database version (%s) is not the same as expected "
-                     "one (%s)", version["version"], db.VERSION)
-            return 2
-    except Exception as e:
-        log.warn("Failed to query database version: %s", str(e))
-        return 2
+def set_db_ownership():
+    fileUtils.chown(mvdb.DB_FILE, constants.VDSM_USER, constants.VDSM_GROUP)
+
+
+def db_version_ok():
+    version = mvdb.version_info()
+    log.debug("Database version %s", version["version"])
+    return version["version"] == mvdb.VERSION
