@@ -22,23 +22,37 @@
 managevolumedb - stores connection details about managed volumes
 """
 
-
 from __future__ import absolute_import
+from __future__ import division
 
+import datetime
 import json
 import logging
 import os
-import sqlite3
+import threading
+
 from contextlib import closing
 
-from vdsm.common import errors
-from vdsm.storage.constants import P_VDSM_LIB
+import lmdb
 
+from vdsm.common import errors
+from vdsm.storage import constants as sc
 
 VERSION = 1
-DB_FILE = os.path.join(P_VDSM_LIB, "managedvolume.db")
+DB_FILE = os.path.join(sc.P_VDSM_LIB, "managedvolume.db")
 
-log = logging.getLogger("storage.managevolumedb")
+# Maximum database file size.
+MAP_SIZE = 10 * 1024**2
+
+# Number of databases in the global env.
+MAX_DBS = 3
+
+# Databases names.
+VOLUMES_DB = b"volumes"
+MULTIPATHS_DB = b"multipaths"
+VERSIONS_DB = b"versions"
+
+# Public interface.
 
 
 class NotFound(errors.Base):
@@ -64,168 +78,207 @@ class Closed(errors.Base):
     msg = "Operation on closed database connection"
 
 
-def open():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    return DB(conn)
+class InvalidDatabase(errors.Base):
+
+    msg = "Invalid database: {self.reason}"
+
+    def __init__(self, reason):
+        self.reason = reason
 
 
 def create_db():
-    create_table = """
-        CREATE TABLE volumes (
-            vol_id TEXT PRIMARY KEY,
-            path TEXT,
-            connection_info TEXT,
-            attachment TEXT,
-            multipath_id TEXT,
-            updated datetime);
-
-        CREATE UNIQUE INDEX multipath_id ON volumes (multipath_id);
-
-        CREATE TABLE versions (
-            version INTEGER PRIMARY KEY,
-            description TEXT,
-            updated datetime
-        );
-
-        INSERT INTO versions (
-            version,
-            description,
-            updated
-        )
-        VALUES (
-            %d,
-            "Initial version",
-            datetime("now")
-        );
-    """
-
-    log.info("Initializing managed volume DB in %s", DB_FILE)
-    conn = sqlite3.connect(DB_FILE)
-    with closing(conn):
-        conn.executescript(create_table % VERSION)
+    return _DB.create()
 
 
 def version_info():
-    sql = """
-        SELECT
-            version,
-            description,
-            updated
-        FROM versions
-        WHERE version = (
-            SELECT max(version) FROM versions
-        )
-    """
-
-    log.debug("Getting current DB version from %s", DB_FILE)
-    conn = sqlite3.connect(DB_FILE)
-    with closing(conn):
-        conn.row_factory = sqlite3.Row
-        res = conn.execute(sql)
-        return res.fetchall()[0]
+    db = open()
+    with closing(db):
+        return db.version_info()
 
 
-class DB(object):
+def open():
+    return _DB()
 
-    def __init__(self, conn):
-        self._conn = conn
+
+# Private
+
+log = logging.getLogger("storage.managevolumedb")
+
+
+class _closed_env(object):
+
+    def __getattr__(self, name):
+        raise Closed
+
+
+_CLOSED_ENV = _closed_env()
+
+
+class _DB(object):
+
+    # LMDB database must be opened exactly once per process. Opening another
+    # instace will break file locks when closing it.
+    _env = _CLOSED_ENV
+    _users = 0
+    _lock = threading.Lock()
+
+    @classmethod
+    def _open_env(cls, create=False):
+        with cls._lock:
+            if cls._env is _CLOSED_ENV:
+                cls._env = lmdb.open(
+                    DB_FILE,
+                    map_size=MAP_SIZE,
+                    max_dbs=MAX_DBS,
+                    create=create)
+            cls._users += 1
+
+    @classmethod
+    def _close_env(cls):
+        with cls._lock:
+            if cls._users == 0:
+                raise RuntimeError("Env is not used by anyone")
+
+            cls._users -= 1
+            if cls._users == 0:
+                cls._env.close()
+                cls._env = _CLOSED_ENV
+
+    @classmethod
+    def create(cls):
+        """
+        Create the database files.
+        """
+        cls._open_env(create=True)
+        try:
+            cls._env.open_db(VOLUMES_DB, create=True)
+            cls._env.open_db(MULTIPATHS_DB, create=True)
+            versions = cls._env.open_db(VERSIONS_DB, create=True)
+
+            with cls._env.begin(write=True) as txn:
+                updated = datetime.datetime.utcnow().replace(microsecond=0)
+                info = {
+                    "version": VERSION,
+                    "description": "Initial version",
+                    "updated": str(updated),
+                }
+                # Ensure sorting up to 32 bit value.
+                key = b"%010d" % VERSION
+                data = json.dumps(info).encode()
+                txn.put(key, data, db=versions)
+        finally:
+            cls._close_env()
+
+    def __init__(self):
+        self._open_env(create=False)
 
     def close(self):
-        self._conn.close()
-        self._conn = ClosedConnection()
+        if self._env is not _CLOSED_ENV:
+            self._env = _CLOSED_ENV
+            self._close_env()
 
     def get_volume(self, vol_id):
-        sql = """
-            SELECT
-                vol_id,
-                connection_info,
-                path,
-                attachment,
-                multipath_id
-            FROM volumes
-            WHERE vol_id = ?
         """
+        Return info stored for volume vol_id.
+        """
+        vol_id = vol_id.encode()
+        volumes = self._env.open_db(VOLUMES_DB)
+        with self._env.begin() as txn:
+            vol_data = txn.get(vol_id, db=volumes)
+            if vol_data is None:
+                raise NotFound(vol_id)
 
-        res = self._conn.execute(sql, (vol_id,))
-        vol = res.fetchall()
-
-        if len(vol) < 1:
-            raise NotFound(vol_id)
-
-        vol = vol[0]
-        volume_info = {}
-        if vol["connection_info"]:
-            volume_info["connection_info"] = json.loads(vol["connection_info"])
-        if vol["path"]:
-            volume_info["path"] = vol["path"]
-        if vol["attachment"]:
-            volume_info["attachment"] = json.loads(vol["attachment"])
-        if vol["multipath_id"]:
-            volume_info["multipath_id"] = vol["multipath_id"]
-
-        return volume_info
+            return json.loads(vol_data)
 
     def add_volume(self, vol_id, connection_info):
-        sql = """
-            INSERT INTO volumes (
-                vol_id,
-                connection_info)
-            VALUES (?, ?)
         """
-
-        conn_info_json = json.dumps(connection_info).encode("utf-8")
-
+        Add volume vol_id to database.
+        """
         log.info("Adding volume %s connection_info=%s",
                  vol_id, connection_info)
-        try:
-            with self._conn:
-                self._conn.execute(sql, (vol_id, conn_info_json))
-        except sqlite3.IntegrityError:
-            raise VolumeAlreadyExists(vol_id, connection_info)
 
-    def remove_volume(self, vol_id):
-        sql = "DELETE FROM volumes WHERE vol_id = ?"
+        vol_id = vol_id.encode()
+        volumes = self._env.open_db(VOLUMES_DB)
 
-        log.info("Removing volume %s", vol_id)
-        with self._conn:
-            self._conn.execute(sql, (vol_id,))
+        with self._env.begin(write=True) as txn:
+            vol_data = txn.get(vol_id, db=volumes)
+            if vol_data is not None:
+                vol_info = json.loads(vol_data)
+                raise VolumeAlreadyExists(vol_id, vol_info)
+
+            vol_info = {"connection_info": connection_info}
+            vol_data = json.dumps(vol_info).encode("utf-8")
+            txn.put(vol_id, vol_data, db=volumes)
 
     def update_volume(self, vol_id, path, attachment, multipath_id):
-        sql = """
-            UPDATE volumes SET
-                path = ?,
-                attachment = ?,
-                multipath_id = ?,
-                updated = datetime('now')
-            WHERE vol_id = ?
         """
-
-        attachment_json = json.dumps(attachment).encode("utf-8")
-
+        Add volume vol_id info.
+        """
         log.info("Updating volume %s path=%s, attachment=%s, multipath_id=%s",
-                 vol_id, path, attachment_json, multipath_id)
-        with self._conn:
-            self._conn.execute(sql, (path, attachment_json, multipath_id,
-                                     vol_id))
+                 vol_id, path, attachment, multipath_id)
+
+        vol_id = vol_id.encode()
+        volumes = self._env.open_db(VOLUMES_DB)
+        multipaths = self._env.open_db(MULTIPATHS_DB)
+
+        with self._env.begin(write=True) as txn:
+            vol_data = txn.get(vol_id, db=volumes)
+            if vol_data is None:
+                raise NotFound(vol_id)
+
+            vol_info = json.loads(vol_data)
+
+            vol_info["path"] = path
+            vol_info["attachment"] = attachment
+            if multipath_id:
+                vol_info["multipath_id"] = multipath_id
+
+            vol_data = json.dumps(vol_info).encode()
+            txn.put(vol_id, vol_data, db=volumes)
+
+            if multipath_id:
+                txn.put(multipath_id.encode(), vol_id, db=multipaths)
+
+    def remove_volume(self, vol_id):
+        """
+        Remove volume vol_id from database.
+        """
+        log.info("Removing volume %s", vol_id)
+
+        vol_id = vol_id.encode()
+        volumes = self._env.open_db(VOLUMES_DB)
+        multipaths = self._env.open_db(MULTIPATHS_DB)
+
+        with self._env.begin(write=True) as txn:
+            vol_data = txn.get(vol_id, db=volumes)
+            if vol_data is None:
+                raise NotFound(vol_id)
+
+            vol_info = json.loads(vol_data)
+            multipath_id = vol_info.get("multipath_id")
+            if multipath_id:
+                txn.delete(multipath_id.encode(), db=volumes)
+
+            txn.delete(vol_id, db=volumes)
+
+    def version_info(self):
+        """
+        Return database version info.
+        """
+        versions = self._env.open_db(VERSIONS_DB)
+        with self._env.begin() as txn:
+            cur = txn.cursor(versions)
+            if not cur.last():
+                raise InvalidDatabase("Database version not found")
+
+            data = cur.value()
+            return json.loads(data)
 
     def owns_multipath(self, multipath_id):
         """
         Return True if multipath device is owned by a managed volume.
         """
-        sql = """
-            SELECT EXISTS (
-                SELECT 1
-                FROM volumes
-                WHERE multipath_id = ?
-            )
-        """
-        res = self._conn.execute(sql, (multipath_id,))
-        row = res.fetchall()[0]
-        return row[0] == 1
-
-
-class ClosedConnection(object):
-
-    def __getattr__(self, name):
-        raise Closed
+        multipaths = self._env.open_db(MULTIPATHS_DB)
+        with self._env.begin() as txn:
+            cur = txn.cursor(multipaths)
+            return cur.set_key(multipath_id.encode())
