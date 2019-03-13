@@ -1811,7 +1811,8 @@ class StoragePool(object):
                      diskType, volUUID=None, desc="",
                      srcImgUUID=sc.BLANK_UUID,
                      srcVolUUID=sc.BLANK_UUID,
-                     initialSize=None):
+                     initialSize=None,
+                     external_disk=None):
         """
         Creates a new volume.
 
@@ -1846,6 +1847,8 @@ class StoragePool(object):
         :param initialSize: The initial size of the volume in case of thin
                             provisioning.
         :type initialSize: int
+        :param external_disk: External disk specification.
+        :type external_disk: str
 
         :returns: a dict with the UUID of the new volume.
         :rtype: dict
@@ -1871,7 +1874,7 @@ class StoragePool(object):
                 imgUUID=imgUUID, capacity=size, volFormat=volFormat,
                 preallocate=preallocate, diskType=diskType, volUUID=volUUID,
                 desc=desc, srcImgUUID=srcImgUUID, srcVolUUID=srcVolUUID,
-                initial_size=initialSize)
+                initial_size=initialSize, external_disk=external_disk)
         return dict(uuid=newVolUUID)
 
     def deleteVolume(self, sdUUID, imgUUID, volumes, postZero, force, discard):

@@ -25,6 +25,7 @@ import logging
 from contextlib import contextmanager
 
 from vdsm import utils
+from vdsm.common import cmdutils
 from vdsm.common import exception
 from vdsm.common.marks import deprecated
 from vdsm.common.threadlocal import vars
@@ -805,7 +806,8 @@ class Volume(object):
 
     @classmethod
     def _create(cls, dom, imgUUID, volUUID, capacity, volFormat, preallocate,
-                volParent, srcImgUUID, srcVolUUID, volPath, initial_size=None):
+                volParent, srcImgUUID, srcVolUUID, volPath, initial_size=None,
+                external_disk=None):
         raise NotImplementedError
 
     def __init__(self, repoPath, sdUUID, imgUUID, volUUID):
@@ -1061,7 +1063,7 @@ class Volume(object):
     @classmethod
     def create(cls, repoPath, sdUUID, imgUUID, capacity, volFormat,
                preallocate, diskType, volUUID, desc, srcImgUUID, srcVolUUID,
-               initial_size=None):
+               initial_size=None, external_disk=None):
         """
         Create a new volume with given size or snapshot
             'capacity' - in bytes
@@ -1072,6 +1074,7 @@ class Volume(object):
             'srcVolUUID' - source volume UUID
             'initial_size' - initial volume size in bytes,
                              in case of thin provisioning
+            'external_disk' - external disk backup this volume.
         """
         # Do the input values validation first.
         if initial_size is not None:
@@ -1090,7 +1093,8 @@ class Volume(object):
 
         dom = sdCache.produce(sdUUID)
         dom.validateCreateVolumeParams(
-            volFormat, srcVolUUID, diskType=diskType, preallocate=preallocate)
+            volFormat, srcVolUUID, diskType=diskType, preallocate=preallocate,
+            external_disk=external_disk)
 
         imgPath = dom.create_image(imgUUID)
 
@@ -1138,6 +1142,19 @@ class Volume(object):
                     capacity, volParent.getCapacity())
                 raise se.InvalidParameterException("capacity", capacity)
 
+        if external_disk:
+            try:
+                disk_info = qemuimg.info(external_disk, trusted_image=False)
+            except cmdutils.Error as e:
+                raise se.ExternalDiskInaccessible(e)
+
+            disk_size = disk_info["virtualsize"]
+
+            # When creating volume backed by external disk, the volume virtual
+            # size must be equal or larger than the external disk virtual size.
+            if disk_size > capacity:
+                raise se.ExternalDiskSizeMismatch(capacity, disk_size)
+
         try:
             cls.log.info("Creating volume %s", volUUID)
 
@@ -1160,7 +1177,8 @@ class Volume(object):
                 metaId = cls._create(dom, imgUUID, volUUID, capacity,
                                      volFormat, preallocate, volParent,
                                      srcImgUUID, srcVolUUID, volPath,
-                                     initial_size=initial_size)
+                                     initial_size=initial_size,
+                                     external_disk=external_disk)
             except (se.VolumeAlreadyExists, se.CannotCreateLogicalVolume,
                     se.VolumeCreationError, se.InvalidParameterException) as e:
                 cls.log.error("Failed to create volume %s: %s", volPath, e)

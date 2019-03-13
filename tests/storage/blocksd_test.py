@@ -34,6 +34,7 @@ from vdsm.storage import blockSD
 from vdsm.storage import constants as sc
 from vdsm.storage import exception as se
 from vdsm.storage import lvm
+from vdsm.storage import qemuimg
 from vdsm.storage import sd
 from vdsm.storage.sdc import sdCache
 
@@ -529,6 +530,111 @@ def test_volume_life_cycle(monkeypatch, tmp_storage, tmp_repo, fake_access,
     assert not os.path.islink(vol.getVolumePath())
     with pytest.raises(se.LogicalVolumeDoesNotExistError):
         lvm.getLV(sd_uuid, vol_uuid)
+
+
+@requires_root
+@pytest.mark.root
+def test_volume_life_cycle_external_disk(
+        tmpdir, tmp_storage, tmp_repo, fake_access, fake_rescan, tmp_db,
+        fake_task, fake_sanlock):
+    # as creation of block storage domain and volume is quite time consuming,
+    # we test several volume operations in one test to speed up the test suite
+
+    sd_uuid = str(uuid.uuid4())
+    domain_name = "domain"
+    domain_version = 5
+
+    dev = tmp_storage.create_device(20 * GiB)
+    lvm.createVG(sd_uuid, [dev], blockSD.STORAGE_UNREADY_DOMAIN_TAG, 128)
+    vg = lvm.getVG(sd_uuid)
+
+    dom = blockSD.BlockStorageDomain.create(
+        sdUUID=sd_uuid,
+        domainName=domain_name,
+        domClass=sd.DATA_DOMAIN,
+        vgUUID=vg.uuid,
+        version=domain_version,
+        storageType=sd.ISCSI_DOMAIN)
+
+    sdCache.knownSDs[sd_uuid] = blockSD.findDomain
+    sdCache.manuallyAddDomain(dom)
+
+    dom.refresh()
+    dom.attach(tmp_repo.pool_id)
+
+    img_uuid = str(uuid.uuid4())
+    vol_uuid = str(uuid.uuid4())
+    vol_capacity = 10 * GiB
+    vol_desc = "Test volume"
+
+    external_disk = str(tmpdir.join("external_disk.raw"))
+    qemuimg.create(external_disk, size=vol_capacity, format="raw").run()
+
+    dom.createVolume(
+        imgUUID=img_uuid,
+        capacity=vol_capacity,
+        volFormat=sc.COW_FORMAT,
+        preallocate=sc.SPARSE_VOL,
+        diskType=sc.DATA_DISKTYPE,
+        volUUID=vol_uuid,
+        desc=vol_desc,
+        srcImgUUID=sc.BLANK_UUID,
+        srcVolUUID=sc.BLANK_UUID,
+        external_disk=external_disk)
+
+    # test create volume
+    vol = dom.produceVolume(img_uuid, vol_uuid)
+    actual = vol.getInfo()
+
+    assert int(actual["capacity"]) == vol_capacity
+    assert actual["format"] == "COW"
+    assert actual["parent"] == sc.BLANK_UUID
+    assert actual["status"] == "OK"
+    assert actual["type"] == "SPARSE"
+    assert actual["voltype"] == "LEAF"
+
+    vol_path = vol.getVolumePath()
+
+    # test volume prepare
+    assert os.path.islink(vol_path)
+    assert not os.path.exists(vol_path)
+
+    vol.prepare()
+
+    assert os.path.exists(vol_path)
+
+    vol_info = qemuimg.info(vol_path)
+    assert vol_info["virtualsize"] == vol_capacity
+    assert vol_info["backingfile"] == external_disk
+
+    # Verify that we can read the pattern from the external disk via the
+    # volume.
+    qemuio.write_pattern(external_disk, "raw", pattern=0xf0)
+    qemuio.verify_pattern(vol_path, "qcow2", pattern=0xf0)
+
+    # Verify that we can write another pattern to the volume.
+    qemuio.write_pattern(vol_path, "qcow2", pattern=0xf1)
+    qemuio.verify_pattern(vol_path, "qcow2", pattern=0xf1)
+
+    # The external disk is not modified by writing to the volume.
+    qemuio.verify_pattern(external_disk, "raw", pattern=0xf0)
+
+    # test volume teardown
+    vol.teardown(sd_uuid, vol_uuid)
+
+    assert os.path.islink(vol_path)
+    assert not os.path.exists(vol_path)
+
+    # test also deleting of the volume
+    vol.delete(postZero=False, force=False, discard=False)
+
+    # verify lvm with volume is deleted
+    assert not os.path.islink(vol.getVolumePath())
+    with pytest.raises(se.LogicalVolumeDoesNotExistError):
+        lvm.getLV(sd_uuid, vol_uuid)
+
+    # Verify that external disk was not affected.
+    assert os.path.exists(external_disk)
 
 
 @requires_root

@@ -1984,3 +1984,25 @@ class TransientDiskAlreadyExists(StorageException):
 
     def __init__(self, disk_path):
         self.value = "disk_path={}".format(disk_path)
+
+
+#################################################
+#  External disk errors
+#  Range: 950-959
+#################################################
+
+
+class ExternalDiskInaccessible(StorageException):
+    code = 950
+    message = "External disk inaccessible"
+
+    def __init__(self, reason):
+        self.value = "reason={}".format(reason)
+
+
+class ExternalDiskSizeMismatch(StorageException):
+    code = 951
+    message = "External disk size does not match volume size"
+
+    def __init__(self, vol_size, disk_size):
+        self.value = "vol_size={} disk_size={}".format(vol_size, disk_size)

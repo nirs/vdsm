@@ -826,6 +826,69 @@ def test_volume_sync_metadata(user_domain, local_fallocate):
     assert int(actual["capacity"]) == 2 * SPARSE_VOL_SIZE
 
 
+@pytest.mark.parametrize("domain_version", [4, 5])
+def test_volume_create_with_external_disk(
+        tmpdir, user_domain, local_fallocate, domain_version):
+    # Create raw external disk.
+    external_disk = str(tmpdir.join("external_disk.raw"))
+    qemuimg.create(external_disk, size=SPARSE_VOL_SIZE, format="raw").run()
+
+    img_uuid = str(uuid.uuid4())
+    vol_uuid = str(uuid.uuid4())
+
+    user_domain.createVolume(
+        imgUUID=img_uuid,
+        capacity=SPARSE_VOL_SIZE,
+        volFormat=sc.COW_FORMAT,
+        preallocate=sc.SPARSE_VOL,
+        diskType='DATA',
+        volUUID=vol_uuid,
+        desc="Volume with external disk",
+        srcImgUUID=sc.BLANK_UUID,
+        srcVolUUID=sc.BLANK_UUID,
+        external_disk=external_disk)
+
+    vol = user_domain.produceVolume(img_uuid, vol_uuid)
+
+    path = vol.getVolumePath()
+    qemu_info = qemuimg.info(path)
+
+    verify_volume_file(
+        path=path,
+        format=qemuimg.FORMAT.QCOW2,
+        virtual_size=SPARSE_VOL_SIZE,
+        qemu_info=qemu_info,
+        backing_file=external_disk)
+
+    # Check the volume specific actual size is fragile,
+    # will easily break on CI or when qemu change the implementation.
+    assert qemu_info['actualsize'] < MiB
+
+    # Verify actual volume metadata
+    actual = vol.getInfo()
+    assert int(actual["capacity"]) == SPARSE_VOL_SIZE
+    assert actual["format"] == "COW"
+    assert actual["type"] == "SPARSE"
+    assert actual["voltype"] == "LEAF"
+    assert actual["uuid"] == vol_uuid
+    # Check the volume specific apparent size is fragile,
+    # will easily break on CI or when qemu change the implementation.
+    assert int(actual["apparentsize"]) < MiB
+    assert int(actual["truesize"]) == qemu_info['actualsize']
+
+    # Verify that we can read the pattern from the external disk via the
+    # volume.
+    qemuio.write_pattern(external_disk, "raw", pattern=0xf0)
+    qemuio.verify_pattern(path, "qcow2", pattern=0xf0)
+
+    # Verify that we can write another pattern to the volume.
+    qemuio.write_pattern(path, "qcow2", pattern=0xf1)
+    qemuio.verify_pattern(path, "qcow2", pattern=0xf1)
+
+    # The external disk is not modified by writing to the volume.
+    qemuio.verify_pattern(external_disk, "raw", pattern=0xf0)
+
+
 def verify_volume_file(
         path, format, virtual_size, qemu_info, backing_file=None):
     assert qemu_info['format'] == format

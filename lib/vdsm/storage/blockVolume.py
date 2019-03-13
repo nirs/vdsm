@@ -489,7 +489,8 @@ class BlockVolume(volume.Volume):
 
     @classmethod
     def _create(cls, dom, imgUUID, volUUID, capacity, volFormat, preallocate,
-                volParent, srcImgUUID, srcVolUUID, volPath, initial_size=None):
+                volParent, srcImgUUID, srcVolUUID, volPath, initial_size=None,
+                external_disk=None):
         """
         Class specific implementation of volumeCreate. All the exceptions are
         properly handled and logged in volume.create()
@@ -514,7 +515,8 @@ class BlockVolume(volume.Volume):
                 operation = qemuimg.create(volPath,
                                            size=capacity,
                                            format=sc.fmt2str(volFormat),
-                                           qcow2Compat=dom.qcow2_compat())
+                                           qcow2Compat=dom.qcow2_compat(),
+                                           backing=external_disk)
                 operation.run()
         else:
             # Create hardlink to template and its meta file

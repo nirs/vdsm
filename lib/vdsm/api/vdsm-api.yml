@@ -11011,6 +11011,24 @@ Volume.create:
         name: initialSize
         type: string
         added: '3.6'
+
+    -   defaultvalue: null
+        description: >
+            if specified, external disk to use as a backing file
+            for this volume.
+
+            The supported values are:
+            - Path: "/path/to/file" or "/dev/vgname/lvname".
+            - NBD TCP: nbd:example.com:9000[:exportname=name]
+            - NBD Unix: nbd:unix:/path/to/unix.sock[:exportname=name]
+            - iSCSI: iscsi://<target-ip>[:<port>]/<target-iqn>/<lun>
+            - SSH: ssh://user@host/path/to/disk.img
+
+            Allowed only when creating thin provisioned volume without a
+            srcVolUUID.
+        name: external_disk
+        type: string
+        added: '4.3'
     return:
         description: A task UUID
         type: *UUID

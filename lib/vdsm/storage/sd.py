@@ -628,7 +628,7 @@ class StorageDomainManifest(object):
 
     @classmethod
     def validateCreateVolumeParams(cls, volFormat, srcVolUUID, diskType=None,
-                                   preallocate=None):
+                                   preallocate=None, external_disk=None):
         """
         Validate create volume parameters
         """
@@ -644,6 +644,19 @@ class StorageDomainManifest(object):
 
         if preallocate is not None and preallocate not in sc.VOL_TYPE:
             raise se.IncorrectType(preallocate)
+
+        if external_disk:
+            # Volume with external disk cannot have a parent volume.
+            if srcVolUUID != sc.BLANK_UUID:
+                raise se.InvalidParameterException(
+                    "external_disk", external_disk)
+
+            # Volumes with external disk must be cow.
+            if volFormat != sc.COW_FORMAT:
+                raise se.IncorrectFormat(sc.type2name(volFormat))
+
+            cls.log.warning("Using unverified external disk: %s",
+                            external_disk)
 
     def teardownVolume(self, imgUUID, volUUID):
         """
@@ -952,20 +965,21 @@ class StorageDomain(object):
 
     @classmethod
     def validateCreateVolumeParams(cls, volFormat, srcVolUUID, diskType=None,
-                                   preallocate=None):
+                                   preallocate=None, external_disk=None):
         return cls.manifestClass.validateCreateVolumeParams(
-            volFormat, srcVolUUID, diskType=diskType, preallocate=preallocate)
+            volFormat, srcVolUUID, diskType=diskType, preallocate=preallocate,
+            external_disk=external_disk)
 
     def createVolume(self, imgUUID, capacity, volFormat, preallocate, diskType,
                      volUUID, desc, srcImgUUID, srcVolUUID,
-                     initial_size=None):
+                     initial_size=None, external_disk=None):
         """
         Create a new volume
         """
         return self.getVolumeClass().create(
             self._getRepoPath(), self.sdUUID, imgUUID, capacity, volFormat,
             preallocate, diskType, volUUID, desc, srcImgUUID, srcVolUUID,
-            initial_size=initial_size)
+            initial_size=initial_size, external_disk=external_disk)
 
     def getMDPath(self):
         return self._manifest.getMDPath()

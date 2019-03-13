@@ -444,7 +444,8 @@ class FileVolume(volume.Volume):
 
     @classmethod
     def _create(cls, dom, imgUUID, volUUID, capacity, volFormat, preallocate,
-                volParent, srcImgUUID, srcVolUUID, volPath, initial_size=None):
+                volParent, srcImgUUID, srcVolUUID, volPath, initial_size=None,
+                external_disk=None):
         """
         Class specific implementation of volumeCreate.
         """
@@ -454,7 +455,7 @@ class FileVolume(volume.Volume):
         else:
             return cls._create_cow_volume(
                 dom, volUUID, capacity, volPath, initial_size, volParent,
-                imgUUID, srcImgUUID, srcVolUUID)
+                imgUUID, srcImgUUID, srcVolUUID, external_disk=external_disk)
 
     @classmethod
     def _create_raw_volume(
@@ -500,7 +501,7 @@ class FileVolume(volume.Volume):
     @classmethod
     def _create_cow_volume(
             cls, dom, vol_id, capacity, vol_path, initial_size, vol_parent,
-            img_id, src_img_id, src_vol_id):
+            img_id, src_img_id, src_vol_id, external_disk=None):
         """
         specific implementation of _create() for COW volumes.
         All the exceptions are properly handled and logged in volume.create()
@@ -519,7 +520,8 @@ class FileVolume(volume.Volume):
             operation = qemuimg.create(vol_path,
                                        size=capacity,
                                        format=sc.fmt2str(sc.COW_FORMAT),
-                                       qcow2Compat=dom.qcow2_compat())
+                                       qcow2Compat=dom.qcow2_compat(),
+                                       backing=external_disk)
             operation.run()
         else:
             # Create hardlink to template and its meta file

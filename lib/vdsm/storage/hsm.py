@@ -1453,7 +1453,8 @@ class HSM(object):
                      preallocate, diskType, volUUID, desc,
                      srcImgUUID=sc.BLANK_UUID,
                      srcVolUUID=sc.BLANK_UUID,
-                     initialSize=None):
+                     initialSize=None,
+                     external_disk=None):
         """
         Create a new volume
             Function Type: SPM
@@ -1462,10 +1463,11 @@ class HSM(object):
         """
         argsStr = ("sdUUID=%s, spUUID=%s, imgUUID=%s, size=%s, volFormat=%s, "
                    "preallocate=%s, diskType=%s, volUUID=%s, desc=%s, "
-                   "srcImgUUID=%s, srcVolUUID=%s, initialSize=%s" %
+                   "srcImgUUID=%s, srcVolUUID=%s, initialSize=%s, "
+                   "external_disk=%s" %
                    (sdUUID, spUUID, imgUUID, size, volFormat, preallocate,
                     diskType, volUUID, desc, srcImgUUID, srcVolUUID,
-                    initialSize))
+                    initialSize, external_disk))
         vars.task.setDefaultException(se.VolumeCreationError(argsStr))
         # Validates that the pool is connected. WHY?
         pool = self.getPool(spUUID)
@@ -1483,12 +1485,14 @@ class HSM(object):
             misc.validateUUID(srcVolUUID, 'srcVolUUID')
         # Validate volume type and format
         dom.validateCreateVolumeParams(
-            volFormat, srcVolUUID, diskType=diskType, preallocate=preallocate)
+            volFormat, srcVolUUID, diskType=diskType, preallocate=preallocate,
+            external_disk=external_disk)
 
         vars.task.getSharedLock(STORAGE, sdUUID)
         self._spmSchedule(spUUID, "createVolume", pool.createVolume, sdUUID,
                           imgUUID, capacity, volFormat, preallocate, diskType,
-                          volUUID, desc, srcImgUUID, srcVolUUID, initial_size)
+                          volUUID, desc, srcImgUUID, srcVolUUID, initial_size,
+                          external_disk)
 
     @public
     def deleteVolume(self, sdUUID, spUUID, imgUUID, volumes, postZero=False,
