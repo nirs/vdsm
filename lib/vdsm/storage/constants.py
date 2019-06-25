@@ -244,7 +244,7 @@ VOLUME_TAGS = [TAG_PREFIX_PARENT,
                TAG_PREFIX_IMAGE,
                TAG_PREFIX_MD]
 
-SUPPORTED_BLOCKSIZE = (512,)
+SUPPORTED_BLOCKSIZE = (512, 4096)
 
 # This is the domain version translation list
 # DO NOT CHANGE OLD VALUES ONLY APPEND

@@ -37,7 +37,13 @@ from vdsm.storage import sd
 from vdsm.storage.sdc import sdCache
 
 from . import qemuio
-from . marks import requires_root, xfail_python3
+
+from . marks import (
+    requires_root,
+    requires_loopback_sector_size,
+    xfail_python3,
+)
+
 from storage.storagefakelib import fake_vg
 
 TESTDIR = os.path.dirname(__file__)
@@ -288,6 +294,43 @@ def test_create_domain_metadata(tmp_storage, tmp_repo, fake_sanlock,
     if domain_version > 3:
         lv = lvm.getLV(dom.sdUUID, sd.XLEASES)
         assert int(lv.size) == 1024 * dom.alignment
+
+
+@requires_root
+@requires_loopback_sector_size
+@xfail_python3
+@pytest.mark.root
+@pytest.mark.parametrize("alignment", [
+    sc.ALIGNMENT_1M, sc.ALIGNMENT_2M, sc.ALIGNMENT_4M, sc.ALIGNMENT_8M])
+def test_create_domain_4k(tmp_storage, tmp_repo, fake_sanlock, alignment):
+    fake_sanlock.sector_size = sc.BLOCK_SIZE_4K
+    sd_uuid = str(uuid.uuid4())
+    domain_name = "loop-domain"
+
+    dev1 = tmp_storage.create_device(
+        20 * 1024**3, sector_size=sc.BLOCK_SIZE_4K)
+    dev2 = tmp_storage.create_device(
+        20 * 1024**3, sector_size=sc.BLOCK_SIZE_4K)
+
+    lvm.createVG(sd_uuid, [dev1, dev2], blockSD.STORAGE_UNREADY_DOMAIN_TAG,
+                 128)
+    vg = lvm.getVG(sd_uuid)
+
+    dom = blockSD.BlockStorageDomain.create(
+        sdUUID=sd_uuid,
+        domainName=domain_name,
+        domClass=sd.DATA_DOMAIN,
+        vgUUID=vg.uuid,
+        version=5,
+        storageType=sd.ISCSI_DOMAIN,
+        block_size=sc.BLOCK_SIZE_4K,
+        alignment=alignment)
+
+    sdCache.knownSDs[sd_uuid] = blockSD.findDomain
+    sdCache.manuallyAddDomain(dom)
+
+    assert dom.alignment == alignment
+    assert dom.block_size == sc.BLOCK_SIZE_4K
 
 
 @requires_root

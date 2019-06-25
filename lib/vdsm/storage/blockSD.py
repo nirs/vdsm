@@ -360,7 +360,10 @@ class LvMetadataRW(object):
                         refresh=self._needs_refresh())
 
         # Fetch the metadata from metadata volume
-        m = misc.readblock(self.metavol, self._offset, self._size).splitlines()
+        m = misc.readblock(self.metavol, self._offset, sc.BLOCK_SIZE_4K)
+        m = m[:sc.METADATA_SIZE]
+        m = m.splitlines()
+
         # Read from metadata volume will bring a load of zeroes trailing
         # actual metadata. Strip it out.
         metadata = [i for i in m if len(i) > 0 and i[0] != '\x00' and "=" in i]
@@ -1021,8 +1024,9 @@ class BlockStorageDomain(sd.StorageDomain):
     manifestClass = BlockStorageDomainManifest
 
     # This storage domain supports only 512b block size and 1M alignment.
-    supported_block_size = (sc.BLOCK_SIZE_512,)
-    supported_alignment = (sc.ALIGNMENT_1M,)
+    supported_block_size = (sc.BLOCK_SIZE_512, sc.BLOCK_SIZE_4K)
+    supported_alignment = (
+        sc.ALIGNMENT_1M, sc.ALIGNMENT_2M, sc.ALIGNMENT_4M, sc.ALIGNMENT_8M)
 
     def __init__(self, sdUUID):
         manifest = self.manifestClass(sdUUID)
@@ -1036,7 +1040,7 @@ class BlockStorageDomain(sd.StorageDomain):
 
         # Check that all devices in the VG have the same logical and physical
         # block sizes.
-        lvm.checkVGBlockSizes(sdUUID, (sc.BLOCK_SIZE_512, sc.BLOCK_SIZE_512))
+        lvm.checkVGBlockSizes(sdUUID, (self.block_size, self.block_size))
 
         self.imageGarbageCollector()
         self._registerResourceNamespaces()
