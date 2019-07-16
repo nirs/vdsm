@@ -33,6 +33,9 @@ from vdsm.storage import sd
 
 class GlusterStorageDomain(nfsSD.NfsStorageDomain):
 
+    supported_block_size = (
+        sc.BLOCK_SIZE_AUTO, sc.BLOCK_SIZE_512, sc.BLOCK_SIZE_4K)
+
     @classmethod
     def getMountPoint(cls, mountPath):
         return os.path.join(sc.REPO_MOUNT_DIR, sd.GLUSTERSD_DIR, mountPath)
