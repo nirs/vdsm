@@ -431,10 +431,13 @@ def test_volume_create_raw_prealloc(
 
 @xfail_python3
 @pytest.mark.parametrize("domain_version", [4, 5])
-@pytest.mark.parametrize("initial_size", [0, INITIAL_VOL_SIZE])
+@pytest.mark.parametrize("initial_size,expected_size", [
+    (0, sc.BLOCK_SIZE_4K),
+    (INITIAL_VOL_SIZE, INITIAL_VOL_SIZE),
+])
 def test_volume_create_raw_prealloc_with_initial_size(
-        tmpdir, tmp_repo, tmp_db, fake_access, fake_rescan,
-        fake_task, local_fallocate, initial_size, domain_version):
+        tmpdir, tmp_repo, tmp_db, fake_access, fake_rescan, fake_task,
+        local_fallocate, initial_size, expected_size, domain_version):
     dom = tmp_repo.create_localfs_domain(name="domain", version=domain_version)
 
     img_uuid = str(uuid.uuid4())
@@ -463,7 +466,7 @@ def test_volume_create_raw_prealloc_with_initial_size(
         virtual_size=PREALLOCATED_VOL_SIZE,
         qemu_info=qemu_info)
 
-    assert qemu_info['actualsize'] == initial_size
+    assert qemu_info['actualsize'] == expected_size
 
     # Verify actual volume metadata
     actual = vol.getInfo()
@@ -537,7 +540,7 @@ def test_volume_create_raw_sparse(
         virtual_size=SPARSE_VOL_SIZE,
         qemu_info=qemu_info)
 
-    assert qemu_info['actualsize'] == 0
+    assert qemu_info['actualsize'] == sc.BLOCK_SIZE_4K
 
     # Verify actual volume metadata
     actual = vol.getInfo()

@@ -25,6 +25,7 @@ import os
 
 from vdsm import constants
 from vdsm import utils
+from vdsm.common import commands
 from vdsm.common import exception
 from vdsm.common.commands import grepCmd
 from vdsm.common.compat import glob_escape
@@ -467,6 +468,18 @@ class FileVolume(volume.Volume):
 
         if preallocate == sc.PREALLOCATED_VOL and alloc_size != 0:
             cls._fallocate_volume(vol_path, alloc_size)
+
+        # Always allocate the first block, to ensure that qemu can detect the
+        # logical block size. Use 4k to make this work for any storage.
+        # See  https://bugzilla.redhat.com/1737256.
+        commands.run([
+            constants.EXT_DD,
+            "if=/dev/zero",
+            "bs={}".format(sc.BLOCK_SIZE_4K),
+            "count=1",
+            "conv=notrunc,fsync",
+            "of={}".format(vol_path),
+        ])
 
         cls.log.info("Request to create RAW volume %s with capacity = %s",
                      vol_path, capacity)
