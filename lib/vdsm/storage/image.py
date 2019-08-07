@@ -472,7 +472,8 @@ class Image:
                         backingFormat=backingFormat,
                         preallocation=preallocation,
                         unordered_writes=destDom.recommends_unordered_writes(
-                            dstVol.getFormat()))
+                            dstVol.getFormat()),
+                        create=False)
                     with utils.stopwatch("Copy volume %s"
                                          % srcVol.volUUID):
                         self._run_qemuimg_operation(operation)
@@ -827,7 +828,8 @@ class Image:
                         dstQcow2Compat=destDom.qcow2_compat(),
                         preallocation=preallocation,
                         unordered_writes=destDom.recommends_unordered_writes(
-                            dstVolFormat))
+                            dstVolFormat),
+                        create=False)
                     with utils.stopwatch("Copy volume %s"
                                          % srcVol.volUUID):
                         self._run_qemuimg_operation(operation)
@@ -1153,7 +1155,8 @@ class Image:
                         dstFormat=sc.fmt2str(volParams['volFormat']),
                         dstQcow2Compat=sdDom.qcow2_compat(),
                         unordered_writes=sdDom.recommends_unordered_writes(
-                            volParams['volFormat']))
+                            volParams['volFormat']),
+                        create=False)
                     with utils.stopwatch("Copy volume %s"
                                          % srcVol.volUUID):
                         self._run_qemuimg_operation(operation)

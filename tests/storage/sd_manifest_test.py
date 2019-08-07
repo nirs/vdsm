@@ -86,7 +86,7 @@ class TestFileManifest(ManifestMixin):
         with self.env() as env:
             make_file_volume(env.sd_manifest, VOLSIZE,
                              self.img_id, self.vol_id)
-            assert 0 == env.sd_manifest.getVAllocSize(
+            assert sc.BLOCK_SIZE_4K == env.sd_manifest.getVAllocSize(
                 self.img_id, self.vol_id)
 
     def test_getisodomainimagesdir(self):

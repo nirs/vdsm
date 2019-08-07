@@ -20,6 +20,7 @@
 from __future__ import absolute_import
 from __future__ import division
 
+import io
 import os
 import shutil
 import tempfile
@@ -328,6 +329,10 @@ def make_file_volume(sd_manifest, size, imguuid, voluuid,
             qcow2Compat=qcow2_compat,
             backing=backing)
         op.run()
+    else:
+        # Simulate volumes first block allocation.
+        with io.open(volpath, "r+b") as f:
+            f.write(b"\0" * sc.BLOCK_SIZE_4K)
 
     # Create meta files.
     mdfiles = [volpath + '.meta', volpath + '.lease']
@@ -372,8 +377,8 @@ def make_block_volume(lvm, sd_manifest, size, imguuid, voluuid,
         if lv_size > size:
             size = lv_size
 
+    volpath = lvm.lvPath(sduuid, voluuid)
     if vol_format == sc.COW_FORMAT:
-        volpath = lvm.lvPath(sduuid, voluuid)
         backing = parent_vol_id if parent_vol_id != sc.BLANK_UUID else None
 
         # Write qcow2 image to the fake block device - truncating the file.
@@ -386,8 +391,12 @@ def make_block_volume(lvm, sd_manifest, size, imguuid, voluuid,
         op.run()
 
         # Truncate fake block device back ot the proper size.
-        with open(volpath, "r+") as f:
+        with open(volpath, "r+b") as f:
             f.truncate(int(lvm.getLV(sduuid, voluuid).size))
+    else:
+        # Simulate volumes first block allocation.
+        with io.open(volpath, "r+b") as f:
+            f.write(b"\0" * sc.BLOCK_SIZE_4K)
 
     with sd_manifest.acquireVolumeMetadataSlot(voluuid) as slot:
         lvm.addtag(sduuid, voluuid, "%s%s" % (sc.TAG_PREFIX_MD, slot))

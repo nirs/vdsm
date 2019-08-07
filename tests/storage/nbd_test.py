@@ -104,6 +104,9 @@ def nbd_env(monkeypatch):
 
         # Destination for copying from nbd server.
         env.dst = os.path.join(env.tmpdir, "dst")
+        with io.open(env.dst, "wb") as f:
+            f.truncate(env.virtual_size)
+            f.write(b"\0" * sc.BLOCK_SIZE_4K)
 
         yield env
 
@@ -138,7 +141,8 @@ def test_roundtrip(nbd_env, format, allocation, discard):
         op = qemuimg.convert(
             nbd_env.src, nbd_url, srcFormat="raw", create=False)
         op.run()
-        op = qemuimg.convert(nbd_url, nbd_env.dst, dstFormat="raw")
+        op = qemuimg.convert(
+            nbd_url, nbd_env.dst, dstFormat="raw", create=False)
         op.run()
 
     with io.open(nbd_env.src) as s, io.open(nbd_env.dst) as d:
@@ -170,7 +174,8 @@ def test_readonly(nbd_env, format, allocation):
         nbd_env.src,
         vol.getVolumePath(),
         dstFormat=sc.fmt2str(format),
-        preallocation=PREALLOCATION.get(format))
+        preallocation=PREALLOCATION.get(format),
+        create=False)
     op.run()
 
     # Server configuration.
@@ -190,7 +195,8 @@ def test_readonly(nbd_env, format, allocation):
 
         # Copy data from NBD server to dst. Both files should match byte
         # for byte after the operation.
-        op = qemuimg.convert(nbd_url, nbd_env.dst, dstFormat="raw")
+        op = qemuimg.convert(
+            nbd_url, nbd_env.dst, dstFormat="raw", create=False)
         op.run()
 
     with io.open(nbd_env.src) as s, io.open(nbd_env.dst) as d:

@@ -24,6 +24,8 @@ from __future__ import division
 import threading
 from contextlib import contextmanager
 
+import pytest
+
 from fakelib import FakeNotifier
 from fakelib import FakeScheduler
 from monkeypatch import MonkeyPatchScope
@@ -48,6 +50,7 @@ from testlib import VdsmTestCase, expandPermutations, permutations
 from testlib import start_thread
 
 from vdsm import jobs
+from vdsm.common import constants
 from vdsm.common import exception
 from vdsm.storage import blockVolume
 from vdsm.storage import constants as sc
@@ -65,7 +68,7 @@ from . marks import xfail_python3
 @xfail_python3
 @expandPermutations
 class TestCopyDataDIV(VdsmTestCase):
-    DEFAULT_SIZE = 1048576
+    DEFAULT_SIZE = constants.MEGAB
 
     def setUp(self):
         self.scheduler = FakeScheduler()
@@ -131,7 +134,8 @@ class TestCopyDataDIV(VdsmTestCase):
         dst_fmt = sc.name2type(dst_fmt)
         job_id = make_uuid()
 
-        with self.make_env(env_type, src_fmt, dst_fmt) as env:
+        with self.make_env(
+                env_type, src_fmt, dst_fmt, size=constants.GIB) as env:
             src_vol = env.src_chain[0]
             dst_vol = env.dst_chain[0]
             write_qemu_chain(env.src_chain)
@@ -165,8 +169,8 @@ class TestCopyDataDIV(VdsmTestCase):
         src_fmt = sc.name2type(src_fmt)
         dst_fmt = sc.name2type(dst_fmt)
         nr_vols = len(copy_seq)
-        with self.make_env(env_type, src_fmt, dst_fmt,
-                           chain_length=nr_vols) as env:
+        with self.make_env(
+                env_type, src_fmt, dst_fmt, chain_length=nr_vols) as env:
             write_qemu_chain(env.src_chain)
             for index in copy_seq:
                 job_id = make_uuid()
@@ -182,6 +186,9 @@ class TestCopyDataDIV(VdsmTestCase):
                                  sorted(guarded.context.locks))
             verify_qemu_chain(env.dst_chain)
 
+    @pytest.mark.xfail(
+        reason="preallocaton broken when using create=False, see "
+               "https://bugzilla.redhat.com/show_bug.cgi?id=1738721")
     def test_preallocated_file_volume_copy(self):
         job_id = make_uuid()
 

@@ -42,6 +42,7 @@ from testlib import temporaryPath
 from vdsm.common import exception
 from vdsm.common.constants import GIB
 from vdsm.common.constants import MEGAB
+from vdsm.storage import constants as sc
 from vdsm.storage import qemuimg
 
 CLUSTER_SIZE = 64 * 1024
@@ -380,11 +381,19 @@ class TestConvert:
 class TestConvertCompressed:
 
     def test_raw_to_compressed_qcow2(self, tmpdir):
+        virtual_size = 1 * GIB
+
         src_file = str(tmpdir.join("test.raw"))
-        dst_file = str(tmpdir.join("test.qcow2"))
         with io.open(src_file, "wb") as f:
-            f.truncate(1 * GIB)
+            f.truncate(virtual_size)
             f.write(b"x" * MEGAB)
+
+        dst_file = str(tmpdir.join("test.qcow2"))
+        op = qemuimg.create(
+            dst_file,
+            size=virtual_size,
+            format=qemuimg.FORMAT.QCOW2)
+        op.run()
 
         src_file_size = qemuimg.info(src_file)["actualsize"]
         op = qemuimg.convert(
@@ -392,21 +401,30 @@ class TestConvertCompressed:
             dst_file,
             srcFormat=qemuimg.FORMAT.RAW,
             dstFormat=qemuimg.FORMAT.QCOW2,
-            compressed=True)
+            compressed=True,
+            create=False)
         op.run()
         dst_file_size = qemuimg.info(dst_file)["actualsize"]
 
         assert src_file_size > dst_file_size
 
     def test_qcow2_to_compressed_qcow2(self, tmpdir):
-        src_file = str(tmpdir.join("test_src.qcow2"))
-        dst_file = str(tmpdir.join("test_dst.qcow2"))
+        virtual_size = 1 * GIB
 
+        src_file = str(tmpdir.join("test_src.qcow2"))
         op = qemuimg.create(
             src_file,
-            size=1 * GIB,
+            size=virtual_size,
             format=qemuimg.FORMAT.QCOW2)
         op.run()
+
+        dst_file = str(tmpdir.join("test_dst.qcow2"))
+        op = qemuimg.create(
+            dst_file,
+            size=virtual_size,
+            format=qemuimg.FORMAT.QCOW2)
+        op.run()
+
         qemuio.write_pattern(
             src_file,
             qemuimg.FORMAT.QCOW2,
@@ -419,7 +437,8 @@ class TestConvertCompressed:
             dst_file,
             srcFormat=qemuimg.FORMAT.QCOW2,
             dstFormat=qemuimg.FORMAT.QCOW2,
-            compressed=True)
+            compressed=True,
+            create=False)
         op.run()
         dst_file_size = qemuimg.info(dst_file)["actualsize"]
 
@@ -437,44 +456,57 @@ class TestConvertUnorderedWrites:
         qemuimg.FORMAT.QCOW2
     ])
     def test_single(self, tmpdir, format):
-        src = str(tmpdir.join("src"))
-        dst = str(tmpdir.join("dst"))
+        virtual_size = 10 * 64 * 1024
         offset = 4 * 64 * 1024
 
+        # Create source image.
+        src = str(tmpdir.join("src"))
         op = qemuimg.create(
-            src, size=10 * 64 * 1024, format=format, qcow2Compat="1.1")
+            src, size=virtual_size, format=format, qcow2Compat="1.1")
         op.run()
         qemuio.write_pattern(src, format, offset=offset)
+
+        # Create destination image.
+        dst = str(tmpdir.join("dst"))
+        with io.open(dst, "wb") as f:
+            f.write(b"\0" * sc.BLOCK_SIZE_4K)
+            f.truncate(virtual_size)
 
         op = qemuimg.convert(
             src,
             dst,
             srcFormat=format,
             dstFormat=qemuimg.FORMAT.RAW,
-            unordered_writes=True)
+            unordered_writes=True,
+            create=False)
         op.run()
 
         qemuio.verify_pattern(dst, qemuimg.FORMAT.RAW, offset=offset)
 
     def test_chain(self, tmpdir):
-        base = str(tmpdir.join("base"))
-        top = str(tmpdir.join("top"))
-        dst = str(tmpdir.join("dst"))
-
+        virtual_size = 10 * 64 * 1024
         base_offset = 4 * 64 * 1024
         top_offset = 5 * 64 * 1024
 
         # Create base image with pattern.
-        op = qemuimg.create(
-            base, size=10 * 64 * 1024, format=qemuimg.FORMAT.RAW)
-        op.run()
+        base = str(tmpdir.join("base"))
+        with io.open(base, "wb") as f:
+            f.write(b"\0" * sc.BLOCK_SIZE_4K)
+            f.truncate(virtual_size)
         qemuio.write_pattern(base, qemuimg.FORMAT.RAW, offset=base_offset)
 
         # Create top image with pattern.
+        top = str(tmpdir.join("top"))
         op = qemuimg.create(
             top, format=qemuimg.FORMAT.QCOW2, qcow2Compat="1.1", backing=base)
         op.run()
         qemuio.write_pattern(top, qemuimg.FORMAT.QCOW2, offset=top_offset)
+
+        # Create the destination image.
+        dst = str(tmpdir.join("dst"))
+        with io.open(dst, "wb") as f:
+            f.write(b"\0" * sc.BLOCK_SIZE_4K)
+            f.truncate(virtual_size)
 
         # Convert, collpasing top and base into dst.
         op = qemuimg.convert(
@@ -482,7 +514,8 @@ class TestConvertUnorderedWrites:
             dst,
             srcFormat=qemuimg.FORMAT.QCOW2,
             dstFormat=qemuimg.FORMAT.RAW,
-            unordered_writes=True)
+            unordered_writes=True,
+            create=False)
         op.run()
 
         # Verify patterns
@@ -490,24 +523,42 @@ class TestConvertUnorderedWrites:
         qemuio.verify_pattern(dst, qemuimg.FORMAT.RAW, offset=top_offset)
 
 
+xfail_bz1738721 = pytest.mark.xfail(
+    reason="preallocation is broken with create=False see "
+           "https://bugzilla.redhat.com/1738721")
+
+
 class TestConvertPreallocation:
 
     @pytest.mark.parametrize("preallocation,virtual_size,actual_size", [
-        (None, 10 * 1024**2, 0),
-        (qemuimg.PREALLOCATION.OFF, 10 * 1024**2, 0),
-        (qemuimg.PREALLOCATION.FALLOC, 10 * 1024**2, 10 * 1024**2),
-        (qemuimg.PREALLOCATION.FULL, 10 * 1024**2, 10 * 1024**2),
+        (None, 10 * 1024**2, sc.BLOCK_SIZE_4K),
+        (qemuimg.PREALLOCATION.OFF, 10 * 1024**2, sc.BLOCK_SIZE_4K),
+        pytest.param(
+            qemuimg.PREALLOCATION.FALLOC, 10 * 1024**2, 10 * 1024**2,
+            marks=xfail_bz1738721),
+        pytest.param(
+            qemuimg.PREALLOCATION.FULL, 10 * 1024**2, 10 * 1024**2,
+            marks=xfail_bz1738721),
     ])
     def test_raw_to_raw(self, preallocation, virtual_size, actual_size):
         with namedTemporaryDir() as tmpdir:
             src = os.path.join(tmpdir, 'src')
-            dst = os.path.join(tmpdir, 'dst')
-
             with io.open(src, "wb") as f:
+                f.write(b"\0" * sc.BLOCK_SIZE_4K)
                 f.truncate(virtual_size)
 
-            op = qemuimg.convert(src, dst, srcFormat="raw", dstFormat="raw",
-                                 preallocation=preallocation)
+            dst = os.path.join(tmpdir, 'dst')
+            with io.open(dst, "wb") as f:
+                f.write(b"\0" * sc.BLOCK_SIZE_4K)
+                f.truncate(virtual_size)
+
+            op = qemuimg.convert(
+                src,
+                dst,
+                srcFormat="raw",
+                dstFormat="raw",
+                preallocation=preallocation,
+                create=False)
             op.run()
 
             stat = os.stat(dst)
@@ -515,21 +566,33 @@ class TestConvertPreallocation:
             assert stat.st_blocks * 512 == actual_size
 
     @pytest.mark.parametrize("preallocation,virtual_size,actual_size", [
-        (None, 10 * 1024**2, 0),
-        (qemuimg.PREALLOCATION.OFF, 10 * 1024**2, 0),
-        (qemuimg.PREALLOCATION.FALLOC, 10 * 1024**2, 10 * 1024**2),
-        (qemuimg.PREALLOCATION.FULL, 10 * 1024**2, 10 * 1024**2),
+        (None, 10 * 1024**2, sc.BLOCK_SIZE_4K),
+        (qemuimg.PREALLOCATION.OFF, 10 * 1024**2, sc.BLOCK_SIZE_4K),
+        pytest.param(
+            qemuimg.PREALLOCATION.FALLOC, 10 * 1024**2, 10 * 1024**2,
+            marks=xfail_bz1738721),
+        pytest.param(
+            qemuimg.PREALLOCATION.FULL, 10 * 1024**2, 10 * 1024**2,
+            marks=xfail_bz1738721),
     ])
     def test_qcow2_to_raw(self, preallocation, virtual_size, actual_size):
         with namedTemporaryDir() as tmpdir:
             src = os.path.join(tmpdir, 'src')
-            dst = os.path.join(tmpdir, 'dst')
-
             op = qemuimg.create(src, size=virtual_size, format="qcow2")
             op.run()
 
-            op = qemuimg.convert(src, dst, srcFormat="qcow2", dstFormat="raw",
-                                 preallocation=preallocation)
+            dst = os.path.join(tmpdir, 'dst')
+            with io.open(dst, "wb") as f:
+                f.write(b"\0" * sc.BLOCK_SIZE_4K)
+                f.truncate(virtual_size)
+
+            op = qemuimg.convert(
+                src,
+                dst,
+                srcFormat="qcow2",
+                dstFormat="raw",
+                preallocation=preallocation,
+                create=False)
             op.run()
 
             stat = os.stat(dst)
@@ -540,19 +603,29 @@ class TestConvertPreallocation:
         with pytest.raises(ValueError):
             qemuimg.convert(
                 'src', 'dst', dstFormat="raw",
-                preallocation=qemuimg.PREALLOCATION.METADATA)
+                preallocation=qemuimg.PREALLOCATION.METADATA, create=False)
 
+    @xfail_bz1738721
     def test_raw_to_qcow2_metadata_prealloc(self):
         virtual_size = 10 * 1024**2
+
         with namedTemporaryDir() as tmpdir:
             src = os.path.join(tmpdir, 'src')
-            dst = os.path.join(tmpdir, 'dst')
+            with io.open(src, "wb") as f:
+                f.write(b"\0" * sc.BLOCK_SIZE_4K)
+                f.truncate(virtual_size)
 
-            op = qemuimg.create(src, size=virtual_size, format="raw")
+            dst = os.path.join(tmpdir, 'dst')
+            op = qemuimg.create(dst, size=virtual_size, format="qcow2")
             op.run()
 
-            op = qemuimg.convert(src, dst, srcFormat="raw", dstFormat="qcow2",
-                                 preallocation=qemuimg.PREALLOCATION.METADATA)
+            op = qemuimg.convert(
+                src,
+                dst,
+                srcFormat="raw",
+                dstFormat="qcow2",
+                preallocation=qemuimg.PREALLOCATION.METADATA,
+                create=False)
             op.run()
 
             actual_size = os.stat(dst).st_size
@@ -949,6 +1022,11 @@ def make_image(path, size, format, index, qcow2_compat, backing=None):
                         qcow2Compat=qcow2_compat,
                         backing=backing)
     op.run()
+
+    if format == "raw":
+        with io.open(path, "r+b") as f:
+            f.write(b"\0" * sc.BLOCK_SIZE_4K)
+
     offset = index * 1024
     qemuio.write_pattern(
         path,
