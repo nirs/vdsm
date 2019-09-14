@@ -46,7 +46,7 @@ AFTER = b"b" * 10
     pytest.param(sc.BLOCK_SIZE_4K, marks=[
         requires_loopback_sector_size,
         pytest.mark.xfail(
-            testing.on_ovirt_ci() and testing.on_fedora("29"),
+            testing.on_ovirt_ci() and testing.on_fedora(),
             reason="fails randomly to create loop device with 4k sector "
                    "size, only in ovirt CI - needs investigation")
     ]),
