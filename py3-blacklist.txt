@@ -4,7 +4,6 @@
 ./lib/vdsm/storage/blockSD.py
 ./lib/vdsm/storage/curl-img-wrap
 ./lib/vdsm/storage/exception.py
-./lib/vdsm/storage/fc-scan
 ./lib/vdsm/storage/fileSD.py
 ./lib/vdsm/storage/fileVolume.py
 ./lib/vdsm/storage/formatconverter.py
