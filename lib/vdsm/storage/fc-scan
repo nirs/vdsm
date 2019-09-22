@@ -41,6 +41,7 @@ from __future__ import print_function
 import glob
 import logging
 import os
+import random
 import sys
 
 from vdsm import utils
@@ -48,112 +49,131 @@ from vdsm.common import concurrent
 
 log = logging.getLogger("fc-scan")
 
+# This is just a starting value before we did any measurments.  It should be
+# larger than number of fc_hosts, and large enough to allow parallel device
+# rescanning.
+MAX_WORKERS = 10
 
-class Scan(object):
 
-    def __init__(self, host, rescan_devices=False):
-        self.host = host
-        self._should_rescan_devices = rescan_devices
-        self._errors = 0
-        self.thread = None
-
-    def start(self):
-        self.thread = concurrent.thread(self.run, name=self.host, log=log)
-        self.thread.start()
-
-    def wait(self):
-        self.thread.join()
-
-    @property
-    def succeeded(self):
-        return self._errors == 0
-
-    def run(self):
-        self._rescan_host()
-        if self._should_rescan_devices:
-            self._rescan_devices()
-
-    def _rescan_host(self):
-        """
-        Scans the host in order to detect new devices
-        """
-        try:
-            path = "/sys/class/scsi_host/%s/scan" % self.host
-            log.debug("Scanning %s", path)
-            with utils.stopwatch("Scanned %s" % path, log=log):
-                fd = os.open(path, os.O_WRONLY)
-                try:
-                    os.write(fd, "- - -")
-                finally:
-                    os.close(fd)
-        except OSError as e:
-            self._errors += 1
-            log.error("Scanning %s failed: %s", path, e)
-        except Exception:
-            self._errors += 1
-            log.exception("Scanning %s failed", path)
-
-    def _rescan_devices(self):
-        """
-        Scans host's devices in order to detect changes in devices size
-        """
-        for device_path in self._find_host_devices():
-            rescan_path = os.path.join(device_path, "../../rescan")
-            path = os.path.normpath(rescan_path)
-            try:
-                log.debug("Rescanning device %s", path)
-                with utils.stopwatch("Rescanned device %s" % path, log=log):
-                    fd = os.open(path, os.O_WRONLY)
-                    try:
-                        os.write(fd, "1")
-                    finally:
-                        os.close(fd)
-            except OSError as e:
-                self._errors += 1
-                log.error("Rescanning %s failed: %s", path, e)
-            except Exception:
-                self._errors += 1
-                log.exception("Rescanning %s failed", path)
-
-    def _find_host_devices(self):
-        host_path = os.path.realpath("/sys/class/fc_host/%s/../.." % self.host)
-        for device_path in glob.iglob("/sys/class/scsi_device/*"):
-            real_device_path = os.path.realpath(device_path)
-            if real_device_path.startswith(host_path):
-                yield real_device_path
+class Error(Exception):
+    """
+    Scanning hosts or devices failed.
+    """
 
 
 def main(args):
     if '-h' in args:
         print(__doc__)
-        return 0
+        return
+
+    should_rescan_devices = "--no-devices" not in args
 
     logging.basicConfig(
         level=logging.DEBUG if '-v' in args else logging.INFO,
         format="%(name)s: %(message)s")
 
-    hosts = [os.path.basename(path)
-             for path in glob.glob("/sys/class/fc_host/host*")]
-
+    hosts = find_fc_hosts()
     if not hosts:
         log.debug("No fc_host found")
-        return 0
+        return
 
-    rescan_devices = "--no-devices" not in args
+    scan_hosts(hosts)
 
-    scans = []
+    if should_rescan_devices:
+        rescan_devices(hosts)
 
-    for host in hosts:
-        s = Scan(host, rescan_devices=rescan_devices)
-        s.start()
-        scans.append(s)
 
-    for s in scans:
-        s.wait()
+# Scanning hosts.
 
-    if not all(s.succeeded for s in scans):
-        return 1
+def find_fc_hosts():
+    return [os.path.basename(path)
+            for path in glob.glob("/sys/class/fc_host/host*")]
+
+
+def scan_hosts(hosts):
+    results = concurrent.tmap(
+        scan_scsi_host,
+        hosts,
+        max_workers=MAX_WORKERS,
+        name="scan")
+
+    if not all(res.value for res in results):
+        raise Error("Scanning hosts failed")
+
+
+def scan_scsi_host(host):
+    try:
+        path = "/sys/class/scsi_host/{}/scan".format(host)
+        log.debug("Scanning %s", host)
+        with utils.stopwatch("Scanned %s" % host, log=log):
+            fd = os.open(path, os.O_WRONLY)
+            try:
+                os.write(fd, "- - -")
+            finally:
+                os.close(fd)
+        return True
+    except OSError as e:
+        log.error("Scanning %s failed: %s", host, e)
+        return False
+    except Exception:
+        log.exception("Scanning %s failed", host)
+        return False
+
+
+# Rescanning fc devices.
+
+def rescan_devices(hosts):
+    devices = list(find_fc_devices(hosts))
+
+    # Randomizing introduces a small delay for collecting all devices, but it
+    # distributes scans evenly and may improve concurrency during scanning.
+    random.shuffle(devices)
+
+    results = concurrent.tmap(
+        rescan_scsi_device,
+        devices,
+        max_workers=MAX_WORKERS,
+        name="rescan")
+
+    if not all(res.value for res in results):
+        raise Error("Rescanning devices failed")
+
+
+def find_fc_devices(hosts):
+    hosts_paths = tuple(
+        os.path.realpath("/sys/class/fc_host/{}/../..".format(host))
+        for host in hosts)
+
+    # Do we have a more efficient way to filter fc devices?
+    for device_path in glob.iglob("/sys/class/scsi_device/*"):
+        real_device_path = os.path.realpath(device_path)
+        if real_device_path.startswith(hosts_paths):
+            yield real_device_path
+
+
+def rescan_scsi_device(device_path):
+    try:
+        rescan_path = os.path.join(device_path, "../../rescan")
+        path = os.path.normpath(rescan_path)
+        log.debug("Rescanning device %s", path)
+        with utils.stopwatch("Rescanned device %s" % path, log=log):
+            fd = os.open(path, os.O_WRONLY)
+            try:
+                os.write(fd, "1")
+            finally:
+                os.close(fd)
+        return True
+    except OSError as e:
+        log.error("Rescanning %s failed: %s", path, e)
+        return False
+    except Exception:
+        log.exception("Rescanning %s failed", path)
+        return False
 
 
 if __name__ == '__main__':
-    sys.exit(main(sys.argv[1:]))
+    try:
+        main(sys.argv[1:])
+    except Error as e:
+        log.error("%s", e)
+        sys.exit(1)
