@@ -21,11 +21,15 @@
 from __future__ import absolute_import
 from __future__ import division
 
+import itertools
 import logging
 import sys
 import threading
 import traceback
+
 from collections import namedtuple
+
+from six.moves import queue
 
 from vdsm.common import pthread
 from vdsm.common import time
@@ -139,27 +143,100 @@ class Barrier(object):
 
 Result = namedtuple("Result", ["succeeded", "value"])
 
+_tmap_count = itertools.count()
 
-def tmap(func, iterable):
-    args = list(iterable)
-    results = [None] * len(args)
 
-    def worker(i, f, arg):
-        try:
-            results[i] = Result(True, f(arg))
-        except Exception as e:
-            results[i] = Result(False, e)
+def tmap(func, values, max_workers=10, name=None):
+    """
+    Execute func with every value in values in a thread pool.
 
-    threads = []
-    for i, arg in enumerate(args):
-        t = thread(worker, args=(i, func, arg), name="tmap/%d" % i)
-        t.start()
-        threads.append(t)
+    To consume the results as soon as they available:
 
-    for t in threads:
-        t.join()
+        for res in concurrent.tmap(func, values):
+            print res
 
-    return results
+    To wait until all results are available:
+
+        results = list(concurrent.tmap(func, values))
+
+    Arguments:
+        func (callable): callable object accepting one argument.
+        values (iterable): iterable of func arguments.
+        max_workers (int): maximum number of threads in the pool. Must be
+            larger than 0.
+        name (str): worker thread name prefix, "tmap-<count>" if not set.
+
+    Return:
+        Iterator of Result tuples; Result(True, result) if func succeeded or
+        Result(False, exception) if func raised.
+    """
+    # Implementation notes
+    #
+    # Iterating values may be slow, so we want to start processing values
+    # immediately when the are submitted to the pending queue. This allows
+    # processing values while they are being fetched.
+    #
+    # To process values we must start worker threads early, but we cannot start
+    # workers before we start to iterate values because we don't know how many
+    # values we have. Both requirements are met by starting workers during
+    # iteration.
+    #
+    # If value processing is faster than value iteration, worker threads may
+    # see an empty pending queue while value are being fetched. Hence we cannot
+    # use empty pending queue as worker termination condition. To signal
+    # workers to quit, we send the special quit_signal value.
+    #
+    # Processing the results may also be slow, so we yield the results
+    # immediately as they are available. This allows the caller to process the
+    # results while we process the pending values.
+    #
+    # Finally, since we used daemon threads joining the worker threads is not
+    # required, but it helps tests that monitor number of threads.
+
+    if max_workers < 1:
+        raise ValueError("max_workers {} < 1".format(max_workers))
+
+    if name is None:
+        name = "tmap-{}".format(next(_tmap_count))
+
+    pending = queue.Queue()
+    results = queue.Queue()
+    quit_signal = object()
+
+    def worker():
+        while True:
+            value = pending.get()
+            if value is quit_signal:
+                break
+
+            try:
+                results.put(Result(True, func(value)))
+            except Exception as e:
+                results.put(Result(False, e))
+                del e
+
+            del value
+
+    count = 0
+    workers = []
+
+    for value in values:
+        pending.put(value)
+        count += 1
+
+        if count <= max_workers:
+            w = thread(worker, name="{}/{}".format(name, count - 1))
+            w.start()
+            workers.append(w)
+
+    for w in workers:
+        pending.put(quit_signal)
+
+    for _ in range(count):
+        yield results.get()
+
+    for w in workers:
+        w.join()
 
 
 def thread(func, args=(), kwargs=None, name=None, daemon=True, log=None):
