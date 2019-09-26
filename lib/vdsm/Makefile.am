@@ -51,6 +51,7 @@ dist_vdsmpylib_PYTHON = \
 	sslutils.py \
 	supervdsm_server.py \
 	taskset.py \
+	test.py \
 	throttledlog.py \
 	utils.py \
 	v2v.py \

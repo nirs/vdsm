@@ -42,7 +42,7 @@ def dropped_privileges():
 @pytest.mark.skipif(os.geteuid() != 0, reason="Requires root")
 def test_ping_call(dropped_privileges):
     proxy = supervdsm.getProxy()
-    assert bool(proxy.ping())
+    assert bool(proxy.test_ping())
 
 
 # This requires environment with tmpfs mounted to /sys/kernel/mm/ksm

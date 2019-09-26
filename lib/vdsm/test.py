@@ -1,4 +1,5 @@
-# Copyright 2011-2019 Red Hat, Inc.
+#
+# Copyright 2019 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -12,31 +13,34 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+# MA 02110-1301 USA
 #
 # Refer to the README and COPYING files for full details of the license
 #
 """
-supervdsm testing wrapper.
+supervdsm testing implementation.
 """
 
 from __future__ import absolute_import
 from __future__ import division
 
-from vdsm import test
-from . import expose
+import os
+import pwd
+
+from vdsm.common.supervdsm import run_as_root
 
 
-@expose
-def test_ping():
-    return test.ping()
+@run_as_root
+def ping():
+    return True
 
 
-@expose
-def test_echo(*args, **kwargs):
-    return test.echo(*args, **kwargs)
+@run_as_root
+def echo(*args, **kwargs):
+    return args, kwargs
 
 
-@expose
-def test_whoami():
-    return test.whoami()
+@run_as_root
+def whoami():
+    return pwd.getpwuid(os.geteuid()).pw_name

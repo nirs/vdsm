@@ -22,6 +22,7 @@
 from __future__ import absolute_import
 from __future__ import division
 
+import functools
 import os
 from multiprocessing.managers import BaseManager, RemoteError
 import logging
@@ -102,3 +103,30 @@ def getProxy():
             if _g_singletonSupervdsmInstance is None:
                 _g_singletonSupervdsmInstance = SuperVdsmProxy()
     return _g_singletonSupervdsmInstance
+
+
+def run_as_root(func):
+    """
+    Decorate a function to make it run via supervdsm.
+
+    Assumes that the supervdsm interface is modulename_funcname. You need to
+    provide a supervdsm entry point in lib/vdsm/supervdsm_api/modulename.py.
+    """
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        if os.geteuid() == 0:
+            return func(*args, **kwargs)
+
+        module_name = func.__module__.split(".")[-1]
+        full_name = "{}_{}".format(module_name, func.__name__)
+        proxy_call = getattr(getProxy(), full_name)
+        return proxy_call(*args, **kwargs)
+
+    return wrapper
+
+
+def is_accessible():
+    """
+    Return True if supervdsm socket is accessible.
+    """
+    return os.access(ADDRESS, os.W_OK)
