@@ -916,7 +916,7 @@ def removeVgMapping(vgName):
         if not mapping.startswith(mappingPrefix):
             continue
         try:
-            devicemapper.removeMapping(mapping)
+            devicemapper.remove_mapping(mapping)
         except Exception:
             pass
 

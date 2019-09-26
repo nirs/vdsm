@@ -66,7 +66,7 @@ def test_dm_status(fake_dmsetup):
 
 @requires_root
 def test_get_paths_status(fake_dmsetup):
-    res = devicemapper.getPathsStatus()
+    res = devicemapper.get_paths_status()
 
     expected = {
         "67:16": "failed",

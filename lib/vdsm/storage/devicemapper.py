@@ -131,7 +131,7 @@ def getAllSlaves():
 
 
 @run_as_root
-def removeMapping(deviceName):
+def remove_mapping(deviceName):
     cmd = [EXT_DMSETUP, "remove", deviceName]
     try:
         commands.run(cmd)
@@ -158,13 +158,13 @@ def getHolders(slaveName):
 def removeMappingsHoldingDevice(slaveName):
     holders = getHolders(slaveName)
     for holder in holders:
-        removeMapping(getDevName(holder))
+        remove_mapping(getDevName(holder))
 
 PATH_STATUS_RE = re.compile(r"(?P<devnum>\d+:\d+)\s+(?P<status>[AF])")
 
 
 @run_as_root
-def getPathsStatus():
+def get_paths_status():
     cmd = [EXT_DMSETUP, "status", "--target", "multipath"]
     try:
         out = commands.run(cmd)

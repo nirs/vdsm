@@ -245,7 +245,7 @@ def pathListIter(filterGuids=()):
     filterLen = len(filterGuids) if filterGuids else -1
     devsFound = 0
     knownSessions = {}
-    pathStatuses = devicemapper.getPathsStatus()
+    pathStatuses = devicemapper.get_paths_status()
 
     for dmId, guid in getMPDevsIter():
         if devsFound == filterLen:
