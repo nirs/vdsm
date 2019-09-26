@@ -29,8 +29,8 @@ from collections import namedtuple
 from glob import glob
 
 from vdsm.common import cmdutils
-from vdsm.common import supervdsm
 from vdsm.common import commands
+from vdsm.common.supervdsm import run_as_root
 from vdsm.constants import EXT_DMSETUP
 
 
@@ -130,10 +130,8 @@ def getAllSlaves():
     return deps
 
 
+@run_as_root
 def removeMapping(deviceName):
-    if os.geteuid() != 0:
-        return supervdsm.getProxy().devicemapper_removeMapping()
-
     cmd = [EXT_DMSETUP, "remove", deviceName]
     try:
         commands.run(cmd)
@@ -165,10 +163,8 @@ def removeMappingsHoldingDevice(slaveName):
 PATH_STATUS_RE = re.compile(r"(?P<devnum>\d+:\d+)\s+(?P<status>[AF])")
 
 
+@run_as_root
 def getPathsStatus():
-    if os.geteuid() != 0:
-        return supervdsm.getProxy().devicemapper_getPathsStatus()
-
     cmd = [EXT_DMSETUP, "status", "--target", "multipath"]
     try:
         out = commands.run(cmd)
@@ -196,10 +192,8 @@ def getPathsStatus():
     return res
 
 
+@run_as_root
 def multipath_status():
-    if os.geteuid() != 0:
-        return supervdsm.getProxy().devicemapper_multipath_status()
-
     cmd = [EXT_DMSETUP, "status", "--target", "multipath"]
     try:
         out = commands.run(cmd)
