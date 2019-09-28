@@ -563,10 +563,15 @@ class LVMCache(object):
                 log.warning(
                     "Reloading LVs failed (vg=%s lvs=%s rc=%s out=%r err=%r)",
                     vgName, lvNames, rc, out, err)
-                lvNames = lvNames if lvNames else self._lvs
-                for l in lvNames:
-                    if isinstance(self._lvs.get(l), Stub):
-                        self._lvs[l] = Unreadable(self._lvs[l].name, True)
+
+                if not lvNames:
+                    lvNames = [lvn for vgn, lvn in self._lvs if vgn == vgName]
+
+                for lvn in lvNames:
+                    key = (vgName, lvn)
+                    if isinstance(self._lvs.get(key), Stub):
+                        self._lvs[key] = Unreadable(self._lvs[key].name, True)
+
                 return dict(self._lvs)
 
             updatedLVs = {}
