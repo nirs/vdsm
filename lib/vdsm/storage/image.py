@@ -462,8 +462,9 @@ class Image:
                         preallocation=preallocation,
                         unordered_writes=destDom.recommends_unordered_writes(
                             dstVol.getFormat()))
-                    with utils.stopwatch("Copy volume %s"
-                                         % srcVol.volUUID):
+                    with utils.stopwatch(
+                            "Copy volume %s to %s",
+                            srcVol.getVolumePath(), dstVol.getVolumePath()):
                         self._run_qemuimg_operation(operation)
                 except ActionStopped:
                     raise
@@ -817,8 +818,9 @@ class Image:
                         preallocation=preallocation,
                         unordered_writes=destDom.recommends_unordered_writes(
                             dstVolFormat))
-                    with utils.stopwatch("Copy volume %s"
-                                         % srcVol.volUUID):
+                    with utils.stopwatch(
+                            "Copy volume %s to %s",
+                            srcVol.getVolumePath(), dstVol.getVolumePath()):
                         self._run_qemuimg_operation(operation)
                 except ActionStopped:
                     raise

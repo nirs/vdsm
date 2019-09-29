@@ -141,9 +141,8 @@ def resize_map(name):
     if os.geteuid() != 0:
         return supervdsm.getProxy().multipath_resize_map(name)
 
-    log.debug("Resizing map %r", name)
     cmd = [_MULTIPATHD.cmd, "resize", "map", name]
-    with utils.stopwatch("Resized map %r" % name, log=log):
+    with utils.stopwatch("Resizing map %r", name, log=log):
         p = commands.start(
             cmd,
             sudo=True,

@@ -91,9 +91,9 @@ def copyToImage(dstImgPath, methodArgs):
         "conv=fsync",
     ]
 
-    log.info("Copy to image %s", dstImgPath)
     with utils.stopwatch(
-            "Copy %s bytes" % totalSize, level=logging.INFO, log=log):
+            "Copy %s bytes to image %s", totalSize, dstImgPath,
+            level=logging.INFO, log=log):
         p = commands.start(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
         with commands.terminating(p):
             _copyData(fileObj, p.stdin, totalSize)
@@ -122,9 +122,9 @@ def copyFromImage(dstImgPath, methodArgs):
         "iflag=direct",
     ]
 
-    log.info("Copy from image %s", dstImgPath)
     with utils.stopwatch(
-            "Copy %s bytes" % total_size, level=logging.INFO, log=log):
+            "Copy %s bytes from image %s", total_size, dstImgPath,
+            level=logging.INFO, log=log):
         p = commands.start(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         with commands.terminating(p):
             _copyData(p.stdout, fileObj, bytes_left)

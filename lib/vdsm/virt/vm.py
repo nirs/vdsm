@@ -3640,8 +3640,7 @@ class Vm(object):
             return device.hotunplug_event.wait(sleep_time)
 
     def _waitForDeviceRemoval(self, device):
-        self.log.debug("Waiting for hotunplug to finish")
-        with utils.stopwatch("Hotunplug %r" % device):
+        with utils.stopwatch("Waiting until device %s is unplugged", device):
             deadline = (vdsm.common.time.monotonic_time() +
                         config.getfloat('vars', 'hotunplug_timeout'))
             sleep_time = config.getfloat('vars', 'hotunplug_check_interval')

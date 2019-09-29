@@ -79,8 +79,7 @@ class Scan(object):
         """
         try:
             path = "/sys/class/scsi_host/%s/scan" % self.host
-            log.debug("Scanning %s", path)
-            with utils.stopwatch("Scanned %s" % path, log=log):
+            with utils.stopwatch("Scanning %s", path, log=log):
                 fd = os.open(path, os.O_WRONLY)
                 try:
                     os.write(fd, "- - -")
@@ -101,8 +100,7 @@ class Scan(object):
             rescan_path = os.path.join(device_path, "../../rescan")
             path = os.path.normpath(rescan_path)
             try:
-                log.debug("Rescanning device %s", path)
-                with utils.stopwatch("Rescanned device %s" % path, log=log):
+                with utils.stopwatch("Rescanning device %s", path, log=log):
                     fd = os.open(path, os.O_WRONLY)
                     try:
                         os.write(fd, "1")

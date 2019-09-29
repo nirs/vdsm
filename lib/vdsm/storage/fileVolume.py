@@ -558,7 +558,7 @@ class FileVolume(volume.Volume):
                 preallocation=preallocation)
 
             with vars.task.abort_callback(operation.abort):
-                with utils.stopwatch("Preallocating volume %s" % vol_path):
+                with utils.stopwatch("Preallocating volume %s", vol_path):
                     operation.run()
         except exception.ActionStopped:
             raise
@@ -741,7 +741,7 @@ class FileVolume(volume.Volume):
                                            new_capacity - cur_capacity,
                                            cur_capacity)
             with vars.task.abort_callback(operation.abort):
-                with utils.stopwatch("Preallocating volume %s" % volPath):
+                with utils.stopwatch("Preallocating volume %s", volPath):
                     operation.run()
         else:
             # for sparse files we can just truncate to the correct size

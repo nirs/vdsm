@@ -609,12 +609,35 @@ class TestStopwatch(TestCaseBase):
         log = FakeLogger(level)
         with utils.stopwatch("message", log=log):
             time.sleep(0.01)
-        self.assertNotEqual(log.messages, [])
-        level, message, kwargs = log.messages[0]
-        print("Logged: %s" % message, end=" ")
+
+        print("Logged: {}".format(log.messages))
+
+        # The first message is logged before the operation.
+        level, start_message, kwargs = log.messages[0]
         self.assertEqual(level, logging.DEBUG)
-        self.assertTrue(message.startswith("message"),
-                        "Unexpected message: %s" % message)
+        self.assertEqual(start_message, "START message")
+
+        # The second message is logged when the operation completes.
+        level, finish_message, kwargs = log.messages[1]
+        self.assertEqual(level, logging.DEBUG)
+        self.assertTrue(
+            finish_message.startswith("FINISH message:"),
+            "Unexpected message: {}".format(finish_message))
+
+    def test_format_args(self):
+        log = FakeLogger(logging.DEBUG)
+        with utils.stopwatch("message %s %s", 1, 2, log=log):
+            pass
+
+        print("Logged: {}".format(log.messages))
+
+        start_message = log.messages[0][1]
+        self.assertEqual(start_message, "START message 1 2")
+
+        finish_message = log.messages[1][1]
+        self.assertTrue(
+            finish_message.startswith("FINISH message 1 2:"),
+            "Unexpected message: {}".format(finish_message))
 
     def test_default_level_no_log(self):
         log = FakeLogger(logging.INFO)

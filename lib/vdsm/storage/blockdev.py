@@ -75,9 +75,9 @@ def zero(device_path, size=None, task=_NullTask()):
     elif size % sc.BLOCK_SIZE_4K:
         raise se.InvalidParameterException("size", size)
 
-    log.info("Zeroing device %s (size=%d)", device_path, size)
-    with utils.stopwatch("Zero device %s" % device_path,
-                         level=logging.INFO, log=log):
+    with utils.stopwatch(
+            "Zeroing device %s (size=%s)", device_path, size,
+            level=logging.INFO, log=log):
         try:
             op = blkdiscard.zeroout_operation(device_path, size)
             with task.abort_callback(op.abort):
@@ -97,10 +97,9 @@ def discard(device_path):
     Arguments:
         device_path (str): Path to block device to discard
     """
-    log.info("Discarding device %s", device_path)
-    try:
-        with utils.stopwatch("Discarded device %s" % device_path,
-                             level=logging.INFO, log=log):
+    with utils.stopwatch(
+            "Discarding device %s", device_path, level=logging.INFO, log=log):
+        try:
             blkdiscard.discard(device_path)
-    except cmdutils.Error as e:
-        log.warning("Discarding device %s failed: %s", device_path, e)
+        except cmdutils.Error as e:
+            log.warning("Discarding device %s failed: %s", device_path, e)

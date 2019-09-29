@@ -381,13 +381,20 @@ def create_connected_socket(host, port, sslctx=None, timeout=None):
 
 
 @contextmanager
-def stopwatch(message, level=logging.DEBUG,
-              log=logging.getLogger('vds.stopwatch')):
+def stopwatch(fmt, *args, **kwargs):
+    """
+    Time operation, logging START and FINISH message around the operation.
+    """
+    level = kwargs.get("level", logging.DEBUG)
+    log = kwargs.get("log") or logging.getLogger('vds.stopwatch')
+
     if log.isEnabledFor(level):
+        message = fmt % args
+        log.log(level, "START %s", message)
         start = vdsm_time.monotonic_time()
         yield
         elapsed = vdsm_time.monotonic_time() - start
-        log.log(level, "%s: %.2f seconds", message, elapsed)
+        log.log(level, "FINISH %s: %.2f seconds", message, elapsed)
     else:
         yield
 
