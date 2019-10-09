@@ -67,17 +67,6 @@ try:
 except ImportError:  # py3
     import pickle  # NOQA: F401 (unused import)
 
-try:
-    # on RHEL/Centos 6.x, the JSON module in the python standard
-    # library does not include significant speedups:
-    # stdlib is based on simplejson 1.9, speedups were added on 2.0.9.
-    # In general, speedups are first found on the
-    # simplejson package.
-    import simplejson as json
-except ImportError:
-    # no big deal, fallback to standard library
-    import json  # NOQA: F401 (unused import)
-
 if six.PY2:
     import subprocess32 as subprocess
 else:

@@ -21,10 +21,13 @@
 from __future__ import absolute_import
 from __future__ import division
 
+import json
 import marshal
+
 from testlib import VdsmTestCase
 from testlib import expandPermutations, permutations
-from vdsm.common.compat import pickle, json
+
+from vdsm.common.compat import pickle
 
 from vdsm.common.password import (
     ProtectedPassword,
