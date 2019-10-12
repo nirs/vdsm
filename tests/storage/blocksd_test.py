@@ -203,7 +203,7 @@ def test_attach_domain_unsupported_version(
         version=3,
         storageType=sd.ISCSI_DOMAIN)
 
-    sdCache.knownSDs[sd_uuid] = blockSD.findDomain
+    sdCache.registerDomains({sd_uuid: blockSD.findDomain})
 
     # Remove domain metadata
     dom.setMetadata({})
@@ -265,7 +265,7 @@ def test_create_domain_metadata(tmp_storage, tmp_repo, fake_sanlock,
         version=domain_version,
         storageType=sd.ISCSI_DOMAIN)
 
-    sdCache.knownSDs[sd_uuid] = blockSD.findDomain
+    sdCache.registerDomains({sd_uuid: blockSD.findDomain})
     sdCache.manuallyAddDomain(dom)
 
     lease = sd.DEFAULT_LEASE_PARAMS
@@ -417,7 +417,7 @@ def test_volume_life_cycle(monkeypatch, tmp_storage, tmp_repo, fake_access,
         version=domain_version,
         storageType=sd.ISCSI_DOMAIN)
 
-    sdCache.knownSDs[sd_uuid] = blockSD.findDomain
+    sdCache.registerDomains({sd_uuid: blockSD.findDomain})
     sdCache.manuallyAddDomain(dom)
 
     img_uuid = str(uuid.uuid4())
@@ -540,7 +540,7 @@ def test_volume_metadata(tmp_storage, tmp_repo, fake_access, fake_rescan,
         version=domain_version,
         storageType=sd.ISCSI_DOMAIN)
 
-    sdCache.knownSDs[sd_uuid] = blockSD.findDomain
+    sdCache.registerDomains({sd_uuid: blockSD.findDomain})
     sdCache.manuallyAddDomain(dom)
 
     dom.refresh()
@@ -625,7 +625,7 @@ def test_create_snapshot_size(
         version=domain_version,
         storageType=sd.ISCSI_DOMAIN)
 
-    sdCache.knownSDs[sd_uuid] = blockSD.findDomain
+    sdCache.registerDomains({sd_uuid: blockSD.findDomain})
     sdCache.manuallyAddDomain(dom)
 
     dom.refresh()

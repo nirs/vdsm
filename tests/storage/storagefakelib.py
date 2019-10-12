@@ -413,6 +413,13 @@ class FakeStorageDomainCache(object):
     def invalidateStorage(self):
         pass
 
+    def registerDomains(self, factories):
+        self.knownSDs.update(factories)
+
+    def unregisterDomains(self, uuids):
+        for u in uuids:
+            self.knownSDs.pop(u, None)
+
 
 class fake_guarded_context(object):
 

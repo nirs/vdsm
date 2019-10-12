@@ -2458,7 +2458,7 @@ class HSM(object):
                 # to them while the storage is disconnected.
                 for sdUUID in doms:
                     sdCache.manuallyRemoveDomain(sdUUID)
-                sdCache.knownSDs.update(doms)
+                sdCache.registerDomains(doms)
 
         self.log.debug("knownSDs: {%s}", ", ".join("%s: %s.%s" %
                        (k, v.__module__, v.__name__)
@@ -2639,7 +2639,7 @@ class HSM(object):
             max_hosts=max_hosts)
 
         findMethod = self._getSDTypeFindMethod(storageType)
-        sdCache.knownSDs[sdUUID] = findMethod
+        sdCache.registerDomains({sdUUID: findMethod})
         self.log.debug("knownSDs: {%s}", ", ".join("%s: %s.%s" %
                        (k, v.__module__, v.__name__)
                        for k, v in six.iteritems(sdCache.knownSDs)))

@@ -231,7 +231,7 @@ def test_convert_to_v5_block(tmpdir, tmp_repo, tmp_storage, tmp_db,
         version=src_version,
         storageType=sd.ISCSI_DOMAIN)
 
-    sdCache.knownSDs[sd_uuid] = blockSD.findDomain
+    sdCache.regiserDomain({sd_uuid: blockSD.findDomain})
     sdCache.manuallyAddDomain(dom)
 
     # Create domain directory structure.

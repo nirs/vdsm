@@ -125,7 +125,7 @@ class TemporaryRepo(object):
             block_size=block_size,
             max_hosts=max_hosts)
 
-        sdCache.knownSDs[sd_uuid] = localFsSD.findDomain
+        sdCache.registerDomains({sd_uuid: localFsSD.findDomain})
         sdCache.manuallyAddDomain(dom)
 
         # sd.StorageDomainManifest.getRepoPath() assumes at least one pool is

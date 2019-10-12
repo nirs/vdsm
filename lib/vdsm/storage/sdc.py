@@ -188,6 +188,29 @@ class StorageDomainCache:
             lvm.invalidateCache()
             self.__domainCache.clear()
 
+    def registerDomains(self, factories):
+        """
+        Register factory functions for producing storage domain.
+
+        Arguments:
+            factories (dict): mapping of storage domain UUID to factory function
+                creating a stoarge domain.  factory function accepts single
+                UUID argument and return a sd.StorageDomain instance.
+        """
+        with self._syncroot:
+            self.knownSDs.update(domains)
+
+    def unregisterDomains(self, *uuids):
+        """
+        Unregister factory for sdUUID.
+
+        Producing unregistered storage domain will raise
+        se.StorageDomainDoesNotExist.
+        """
+        with self._syncroot:
+            for u in uuids:
+                self.knownSDs.pop(sdUUID, None)
+
     def manuallyAddDomain(self, domain):
         with self._syncroot:
             self.__domainCache[domain.sdUUID] = domain

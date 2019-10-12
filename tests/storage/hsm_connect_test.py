@@ -179,4 +179,4 @@ def test_cache_update(fake_hsm):
 
     sc = storageServer.ConnectionFactory.connections
     assert sc['1'].connected
-    assert hsm.sdCache.knownSDs['sd-uuid-1'] == nfs_find_method
+    assert hsm.sdCache.registerDomains({'sd-uuid-1': nfs_find_method})
