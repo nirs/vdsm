@@ -544,18 +544,19 @@ class Aborting(object):
 
 class Callable(object):
 
-    def __init__(self, hang=False):
+    def __init__(self, hang=False, timeout=None):
         self._hang = hang
+        self._timeout = timeout
         self._running = threading.Event()
         self._blocking = threading.Event()
         self._done = threading.Event()
 
-    def __call__(self, timeout=None):
+    def __call__(self):
         self._running.set()
         log.info("callable is running (hang=%s)", self._hang)
         if self._hang is True:
-            log.info("callable is waiting (timeout=%s)", timeout)
-            if not self._blocking.wait(timeout):
+            log.info("callable is waiting (timeout=%s)", self._timeout)
+            if not self._blocking.wait(self._timeout):
                 raise RuntimeError("Timeout waiting for task switch off")
         self._done.set()
         log.info("callable is finished")
