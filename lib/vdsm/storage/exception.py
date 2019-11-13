@@ -347,9 +347,9 @@ class VolumeNotSparse(StorageException):
     message = "Volume type is not sparse"
 
 
-class CannotSparsifyVolume(StorageException):
-    code = 234
-    message = "Cannot sparsify volume"
+# class CannotSparsifyVolume(StorageException):
+#    code = 234
+#    message = "Cannot sparsify volume"
 
 
 class InvalidVolumeUpdate(StorageException):
