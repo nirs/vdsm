@@ -20,7 +20,7 @@
 from __future__ import absolute_import
 from __future__ import division
 
-import os
+import time
 import collections
 
 from contextlib import contextmanager
@@ -28,20 +28,9 @@ from contextlib import contextmanager
 
 def monotonic_time():
     """
-    Return the amount of time, in secs, elapsed since a fixed
-    arbitrary point in time in the past.
-    This function is useful if the client just
-    needs to use the difference between two given time points.
-
-    With respect to time.time():
-    * The resolution of this function is lower. On Linux,
-      the resolution is 1/_SC_CLK_TCK, which in turn depends on
-      the value of HZ configured in the kernel. A commonly
-      found resolution is 10 (ten) ms.
-    * This function is resilient with respect to system clock
-      adjustments.
+    Return monotonic time that cannot go backwards.
     """
-    return os.times()[4]
+    return time.monotonic()
 
 
 class Clock(object):
