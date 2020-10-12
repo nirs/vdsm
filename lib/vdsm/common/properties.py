@@ -138,14 +138,14 @@ class Property(object):
 class Enum(Property):
 
     def __init__(self, required=False, default=None, doc=None, values=()):
-        if not required and default not in values:
+        if not required and default is not None and default not in values:
             raise ValueError("Default value %s not in allowed values %s" %
                              (default, values))
         super(Enum, self).__init__(required=required, default=default, doc=doc)
         self.values = values
 
     def validate(self, value):
-        if value not in self.values:
+        if value is not None and value not in self.values:
             raise ValueError("Invalid value %r for property %s" %
                              (value, self.name))
         return value
